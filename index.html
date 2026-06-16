@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>환상의 나라 길드 사이트</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header onclick="toggleView('homeView')" style="cursor: pointer;" title="메인 화면으로 가기">
+    <h1>🏰 환상의 나라 길드 사이트</h1>
+</header>
+
+<div class="container" id="homeView">
+    <h2 style="text-align: center; color: #2c3e50;">🌟 콘텐츠 메뉴</h2>
+    <div class="menu-grid">
+        <div class="menu-card" onclick="alert('해당 메뉴는 준비 중입니다!')"><div class="menu-icon">🏰</div><div class="menu-text">공성전</div></div>
+        <div class="menu-card" onclick="toggleView('mainListView')"><div class="menu-icon">⚔️</div><div class="menu-text">길드전</div></div>
+        <div class="menu-card" onclick="alert('해당 메뉴는 준비 중입니다!')"><div class="menu-icon">🐉</div><div class="menu-text">강림원정대</div></div>
+    </div>
+</div>
+
+<div class="container" id="mainListView">
+    <button class="btn btn-back" onclick="toggleView('homeView')">🔙 홈으로</button>
+    <div class="tabs">
+        <button class="tab-btn active" id="tab-attack" onclick="switchMainTab('attack')">⚔️ 공격 추천 덱</button>
+        <button class="tab-btn" id="tab-defense" onclick="switchMainTab('defense')">🛡️ 방어 추천 덱</button>
+    </div>
+    <div id="deckListContent"></div>
+    <button class="btn btn-primary" style="width: 100%; margin-top: 15px;" onclick="openDeckBuilder()">+ 새로운 덱 추가하기</button>
+</div>
+
+<div class="container" id="deckDetailView">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <button class="btn btn-back" style="margin: 0;" onclick="toggleView('mainListView')">🔙 리스트로</button>
+        <div>
+            <button class="btn" id="deleteDeckBtn" style="background-color: #e74c3c; color: white; margin-right: 5px; display: none;" onclick="deleteCurrentDeck()">🗑️ 삭제</button>
+            <button class="btn" style="background-color: #f39c12; color: white;" onclick="editCurrentDeck()">✏️ 수정</button>
+        </div>
+    </div>
+    
+    <h2 id="detailDeckTitle" style="text-align: center; color: #2c3e50;">덱 이름</h2>
+    <div style="text-align: center; margin-bottom: 10px;"><span id="detailDeckConcept" class="badge-concept">컨셉</span></div>
+    
+    <div id="detailDeckDesc" style="text-align: center; color: #555; font-size: 14px; margin-bottom: 20px; font-weight: bold;">💡 설명이 없습니다.</div>
+    
+    <div class="board-container">
+        <div class="hero-board" id="detailHeroBoard"></div>
+        <div class="pet-slot filled" id="detailPetSlot"></div>
+    </div>
+    
+    <div style="text-align: center; margin-top: 20px; background: #fff; padding: 15px; border-radius: 10px; border: 1px solid #ddd;">
+        <h4 style="color: #8e44ad; margin-top: 0; margin-bottom: 15px;">⚔️ 스킬 예약 순서</h4>
+        <div id="detailSkillQueue" style="display: flex; justify-content: center; gap: 10px;"></div>
+    </div>
+
+    <div class="memo" style="margin-top: 20px;">
+        💡 <b>장비 정보 조회:</b> 위 보드에서 영웅을 클릭하면 해당 영웅의 장비 및 세팅 정보를 볼 수 있습니다.
+    </div>
+</div>
+
+<div class="container" id="deckBuilderView">
+    <button class="btn btn-back" onclick="toggleView('mainListView')">🔙 취소</button>
+    
+    <div class="builder-tabs">
+        <button class="builder-tab-btn active" id="b-tab-config" onclick="switchBuilderTab('config')">1. 덱 구성</button>
+        <button class="builder-tab-btn" id="b-tab-detail" onclick="switchBuilderTab('detail')">2. 세부정보</button>
+    </div>
+
+    <div id="builderConfigSection">
+        <div class="formation-control">
+            <label><strong>진형 선택: </strong></label>
+            <select id="formationType" onchange="renderBuilderBoard()">
+                <option value="basic">기본 진형</option>
+                <option value="balance">밸런스 진형</option>
+                <option value="attack">공격 진형</option>
+                <option value="protect">보호 진형</option>
+            </select>
+            <p style="font-size: 12px; color: #7f8c8d; margin-top: 5px;">배치할 '빈자리'나 '펫 슬롯'을 클릭한 뒤, 아래에서 선택하세요.</p>
+        </div>
+
+        <div class="board-container">
+            <div class="hero-board" id="builderHeroBoard"></div>
+            <div class="pet-slot" id="builderPetSlot" onclick="clickPetSlot()"></div>
+        </div>
+
+        <div class="filter-section">
+            <input type="text" id="searchInput" placeholder="🔍 이름 검색..." oninput="applyFilters()">
+            <select id="sortSelect" onchange="applyFilters()"><option value="rarity">🌟 희귀도 순</option><option value="name">🔠 가나다 순</option></select>
+            <select id="raritySelect" onchange="applyFilters()"><option value="all">등급 전체</option><option value="구세나">구세나</option><option value="찐스">찐스</option><option value="짭스">짭스</option><option value="희귀">희귀</option></select>
+            <select id="roleSelect" onchange="applyFilters()"><option value="all">역할 전체</option><option value="공격형">⚔️ 공격형</option><option value="방어형">🛡️ 방어형</option><option value="마법형">🪄 마법형</option><option value="지원형">💖 지원형</option><option value="만능형">🌀 만능형</option></select>
+        </div>
+
+        <div class="char-pool-container">
+            <div class="char-pool" id="charPool"></div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px;">
+            <button class="btn btn-primary" onclick="switchBuilderTab('detail')">다음: 세부정보 입력 ➡️</button>
+        </div>
+    </div>
+
+    <div id="builderDetailSection" style="display: none;">
+        
+        <div class="formation-control" style="background: #fdfae6; padding: 15px; border-radius: 8px; border: 1px solid #f1c40f;">
+            <label style="display: block; margin-bottom: 8px; color: #d35400;"><strong>🏷️ 덱 이름: </strong></label>
+            <input type="text" id="deckNameInput" placeholder="예: 국민 밸런스 방덱" style="width: 90%; max-width: 400px; padding: 10px; border-radius: 5px; border: 1px solid #bdc3c7; outline: none; font-size: 16px; font-weight: bold; color: #2c3e50; text-align: center;">
+        </div>
+
+        <div class="formation-control" style="margin-top: 15px;">
+            <label><strong>덱 컨셉 설정: </strong></label>
+            <select id="deckConceptSelect" style="padding: 10px; font-weight: bold; color: #c0392b; border: 2px solid #e74c3c; border-radius: 5px; outline: none;">
+                <option value="상관없음">선택 안 함 (상관없음)</option>
+                <option value="속공">⚡ 속공 위주</option>
+                <option value="속내실">⚖️ 속내실 밸런스</option>
+                <option value="내실">🛡️ 내실(버티기) 위주</option>
+            </select>
+        </div>
+
+        <div class="formation-control" style="margin-top: 15px;">
+            <label style="display: block; margin-bottom: 8px;"><strong>💡 덱 한 줄 설명: </strong></label>
+            <input type="text" id="deckDescInput" placeholder="예: 가장 무난하고 생존력이 높은 방어 덱입니다." style="width: 90%; max-width: 400px; padding: 10px; border-radius: 5px; border: 1px solid #bdc3c7; outline: none; font-size: 14px;">
+        </div>
+
+        <div class="formation-control" style="margin-top: 20px; background: #fff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+            <label style="color: #8e44ad;"><strong>⚔️ 스킬 예약 설정 (최대 3개): </strong></label>
+            <div id="skillQueue" style="display: flex; justify-content: center; gap: 10px; margin-top: 10px;"></div>
+            <p style="font-size: 11px; color: #7f8c8d; margin-top: 10px;">아래 스킬을 클릭하여 예약하세요. (순위 클릭 시 취소)</p>
+            <div id="availableSkills" style="display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 10px;"></div>
+        </div>
+
+        <p style="text-align: center; color: #e67e22; font-weight: bold; margin-top: 20px;">※ 영웅을 클릭하여 장비 세팅을 입력하세요.</p>
+        
+        <div class="board-container">
+            <div class="hero-board" id="detailInputHeroBoard"></div>
+            <div class="pet-slot" id="detailInputPetSlot"></div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 2px dashed #bdc3c7;">
+            <button class="btn btn-primary" style="font-size: 18px; padding: 15px 40px; background-color: #27ae60;" onclick="saveDeck()">✅ 덱 완성 및 추가하기</button>
+        </div>
+    </div>
+</div>
+
+<div id="equipModal" class="modal">
+    <div class="modal-content">
+        <h3 id="equipModalTitle" style="color: #2c3e50; border-bottom: 2px solid #2c3e50; padding-bottom: 10px;">영웅 장비 세팅</h3>
+        <div class="equip-form">
+            <label>🛡️ 장비</label>
+            <div class="split-input">
+                <select id="eqSet">
+                    <option value="없음">세트 선택 안 함</option>
+                    <option value="추적자">추적자</option>
+                    <option value="성기사">성기사</option>
+                    <option value="선봉장">선봉장</option>
+                    <option value="암살자">암살자</option>
+                    <option value="수문장">수문장</option>
+                    <option value="수호자">수호자</option>
+                    <option value="복수자">복수자</option>
+                    <option value="주술사">주술사</option>
+                    <option value="조율자">조율자</option>
+                </select>
+                <input type="text" id="eqMain" placeholder="주옵션 (예: 방방받받)">
+            </div>
+            
+            <label>💍 장신구</label>
+            <div class="split-input">
+                <select id="eqAccMain">
+                    <option value="없음">주</option>
+                    <option value="부활">부활</option>
+                    <option value="불사">불사</option>
+                    <option value="권능">권능</option>
+                </select>
+                <select id="eqAccSub">
+                    <option value="없음">부</option>
+                    <option value="부활">부활</option>
+                    <option value="불사">불사</option>
+                    <option value="권능">권능</option>
+                </select>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                <label style="margin: 0;">⚔️ 전용장비</label>
+                <button id="addExBtn" class="btn" style="padding: 2px 8px; font-size: 12px; background: #3498db; color: white;" onclick="addExField()">+ 추가하기</button>
+            </div>
+            <div id="exContainer" style="display: flex; flex-direction: column; gap: 5px; margin-top: 5px;"></div>
+        </div>
+        <div style="text-align: right; margin-top: 20px;">
+            <button class="btn" onclick="closeEquipModal()" style="background: #95a5a6; color: white; margin-right: 10px;">닫기</button>
+            <button class="btn btn-primary" onclick="saveEquipData()" id="saveEquipBtn">저장</button>
+        </div>
+    </div>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>

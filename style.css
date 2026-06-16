@@ -1,0 +1,89 @@
+body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; color: #333; }
+header { background-color: #2c3e50; color: white; padding: 20px; text-align: center; transition: background-color 0.3s; }
+header:hover { background-color: #1a252f; }
+.container { max-width: 1000px; margin: 20px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+
+.btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+.btn-primary { background-color: #3498db; color: white; }
+.btn-primary:hover { background-color: #2980b9; }
+.btn-back { background:#e74c3c; color:white; margin-bottom:20px; }
+
+#homeView, #mainListView, #deckBuilderView, #deckDetailView { display: none; } 
+
+.menu-grid { display: flex; gap: 20px; justify-content: center; margin-top: 30px; flex-wrap: wrap; padding: 20px; }
+.menu-card { width: 220px; height: 180px; background-color: #ecf0f1; border: 3px solid #bdc3c7; border-radius: 15px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+.menu-card:hover { transform: translateY(-5px); border-color: #3498db; background-color: #ebf5fb; }
+.menu-icon { font-size: 50px; margin-bottom: 15px; }
+.menu-text { font-size: 20px; font-weight: bold; color: #2c3e50; }
+
+.tabs { display: flex; justify-content: center; margin-bottom: 20px; border-bottom: 2px solid #bdc3c7; }
+.tab-btn { background: none; border: none; padding: 15px 30px; font-size: 16px; font-weight: bold; color: #7f8c8d; cursor: pointer; transition: 0.3s; border-bottom: 3px solid transparent; }
+.tab-btn.active { color: #e74c3c; border-bottom-color: #e74c3c; }
+
+.builder-tabs { display: flex; justify-content: center; margin-bottom: 20px; background: #ecf0f1; border-radius: 8px; overflow: hidden; }
+.builder-tab-btn { flex: 1; border: none; padding: 15px; font-weight: bold; background: none; cursor: pointer; color: #7f8c8d; }
+.builder-tab-btn.active { background: #3498db; color: white; }
+
+.deck-card { background: white; border: 2px solid #ddd; border-radius: 8px; margin-bottom: 15px; overflow: hidden; }
+.deck-card-header { padding: 15px; background: #ecf0f1; display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-weight: bold; }
+.deck-card-body { padding: 15px; display: none; border-top: 1px solid #ddd; background: #fafafa; }
+.open .deck-card-body { display: block; }
+.mini-hero-list { display: flex; gap: 10px; align-items: center; }
+.mini-hero { width: 40px; height: 40px; border-radius: 5px; border: 1px solid #bdc3c7; object-fit: cover; }
+.counter-deck { background: white; border-left: 4px solid #e74c3c; padding: 10px; margin-top: 10px; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+.defense-deck { background: white; border-left: 4px solid #3498db; padding: 15px; margin-bottom: 15px; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s;}
+.defense-deck:hover { background: #ebf5fb; border-color: #2980b9; }
+
+.badge-concept { background-color: #8e44ad; color: white; padding: 5px 10px; border-radius: 20px; font-size: 13px; font-weight: bold; }
+
+.board-container { display: flex; justify-content: space-between; align-items: center; background: #ecf0f1; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+.hero-board { display: flex; gap: 30px; flex: 1; justify-content: center; margin-right: 20px; }
+.formation-line { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.line-title { font-size: 13px; font-weight: bold; color: #7f8c8d; margin-bottom: 5px; }
+
+.hero-slot { width: 75px; height: 75px; background-color: #bdc3c7; border: 3px dashed #95a5a6; border-radius: 10px; display: flex; justify-content: center; align-items: center; color: white; font-size: 13px; font-weight: bold; cursor: pointer; transition: 0.2s; overflow: hidden; position: relative;}
+.hero-slot.active-slot { border-color: #e74c3c !important; background-color: #fadbd8; color: #c0392b; box-shadow: 0 0 10px rgba(231,76,60,0.5); }
+.hero-slot.filled { border-style: solid; border-color: #3498db; background-color: white; }
+.hero-slot img { width: 100%; height: 100%; object-fit: cover; }
+
+.equip-badge { position: absolute; top: 2px; right: 2px; background: #27ae60; color: white; font-size: 10px; padding: 2px 5px; border-radius: 5px; display: none;}
+.hero-slot.has-equip .equip-badge { display: block; }
+
+.pet-slot { width: 80px; height: 80px; background-color: white; border: 3px dashed #f39c12; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: 0.2s; overflow: hidden; }
+.pet-slot.active-slot { border-color: #e74c3c; background-color: #fdfae6; box-shadow: 0 0 10px rgba(230,126,34,0.5); }
+.pet-slot.filled { border-style: solid; border-color: #e67e22; }
+.pet-slot img { width: 100%; height: 100%; object-fit: cover; }
+.pet-slot-title { font-weight: bold; color: #d35400; font-size: 14px; }
+
+/* 💡 스킬 예약 관련 디자인 */
+.skill-slot { width: 65px; height: 65px; background-color: #bdc3c7; border: 2px dashed #95a5a6; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; font-size: 12px; font-weight: bold; cursor: pointer; transition: 0.2s; text-align: center; line-height: 1.3; }
+.skill-slot.filled { background-color: #8e44ad; border-style: solid; border-color: #9b59b6; box-shadow: 0 2px 5px rgba(142,68,173,0.3); }
+.skill-slot:hover { opacity: 0.8; }
+.skill-btn { background-color: #34495e; color: white; border: none; padding: 8px 12px; border-radius: 5px; font-size: 12px; cursor: pointer; transition: 0.2s; font-weight: bold; }
+.skill-btn:hover { background-color: #2c3e50; transform: translateY(-2px); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+
+.filter-section { display: flex; flex-wrap: wrap; gap: 10px; background: #ecf0f1; padding: 15px; border-radius: 8px; margin-bottom: 20px; align-items: center; }
+.filter-section select, .filter-section input { padding: 8px; border-radius: 5px; border: 1px solid #bdc3c7; outline: none; }
+.filter-section input { flex: 1; min-width: 150px; }
+.char-pool-container { max-height: 500px; overflow-y: auto; border: 2px dashed #ddd; padding: 15px; border-radius: 10px; background: #fafafa; }
+.char-pool { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; padding-top: 15px; }
+.char-card { width: 75px; text-align: center; cursor: pointer; transition: 0.2s; position: relative; }
+.char-card img { width: 60px; height: 60px; border-radius: 10px; border: 2px solid #bdc3c7; object-fit: cover; background-color: white; }
+.char-card:hover img { border-color: #e74c3c; transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+.char-name { font-size: 12px; font-weight: bold; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.badge { position: absolute; top: -10px; right: -10px; width: 32px; height: 32px; border-radius: 50%; color: white; font-weight: bold; font-size: 10px; display: flex; justify-content: center; align-items: center; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.3); border: 2px solid white; letter-spacing: -0.5px; }
+.badge-구세나 { background-color: #8e44ad; }
+.badge-찐스 { background-color: #e67e22; }
+.badge-짭스 { background-color: #f1c40f; color: #333; border-color: #f39c12; }
+.badge-희귀 { background-color: #3498db; }
+.badge-펫 { background-color: #27ae60; }
+
+.modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
+.modal-content { background-color: white; padding: 25px; border-radius: 10px; width: 90%; max-width: 450px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+.equip-form { display: flex; flex-direction: column; gap: 5px; margin-top: 15px; }
+.equip-form label { font-weight: bold; font-size: 14px; color: #34495e; margin-top: 15px; }
+.equip-form select, .equip-form input { padding: 8px; border-radius: 5px; border: 1px solid #bdc3c7; outline: none; }
+.split-input { display: flex; gap: 10px; }
+.split-input > * { flex: 1; }
+.ex-select { width: 100%; }
