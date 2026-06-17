@@ -109,11 +109,25 @@ function attemptLogin() {
     if (!user) return alert('아이디 또는 비밀번호가 틀렸습니다.');
     if (user.status === 'pending') return alert('가입 대기 중입니다. 관리자의 승인을 기다려주세요.');
     if (user.status === 'kicked') return alert('길드에서 강퇴(탈퇴)되어 접속할 수 없습니다.');
-    currentUser = user; saveCurrentUser(); alert(`환영합니다, ${user.nickname}님!`);
+    
+    currentUser = user; 
+    currentUser.lastLogin = Date.now(); 
+    saveCurrentUser(); 
+    db.collection('users').doc(currentUser.id).update({ lastLogin: currentUser.lastLogin }); 
+    logActivity('길드 웹사이트에 접속(로그인) 했습니다.'); 
+    
+    alert(`환영합니다, ${user.nickname}님!`);
     document.getElementById('loginId').value = ''; document.getElementById('loginPw').value = ''; toggleView('homeView');
 }
 
-function attemptLogout() { currentUser = null; saveCurrentUser(); alert('로그아웃 되었습니다.'); toggleView('homeView'); }
+function attemptLogout() { 
+    logActivity('길드 웹사이트에서 로그아웃 했습니다.'); // 💡 로그아웃 기록
+    currentUser = null; 
+    saveCurrentUser(); 
+    alert('로그아웃 되었습니다.'); 
+    toggleView('homeView'); 
+}
+
 function attemptSignup() {
     const id = document.getElementById('signupId').value.trim(); const pw = document.getElementById('signupPw').value.trim(); const nick = document.getElementById('signupNick').value.trim();
     if(!id || !pw || !nick) return alert('아이디, 비밀번호, 닉네임을 모두 입력해야 합니다.');
@@ -153,9 +167,10 @@ function leaveGuild() {
 
 function enterMenu(menu) {
     if (!currentUser) { alert('🚨 길드원 전용 메뉴입니다. 로그인을 먼저 해주세요!'); toggleView('loginView'); return; }
-    if (menu === 'guildWar') toggleView('mainListView'); 
-    else if (menu === 'castle') { toggleView('castleView'); renderCastleTab(new Date().getDay()); }
-    else if (menu === 'raid') { toggleView('raidView'); renderRaidTab('태오'); }
+    
+    if (menu === 'guildWar') { logActivity('⚔️ 길드전 메뉴에 접속했습니다.'); toggleView('mainListView'); } 
+    else if (menu === 'castle') { logActivity('🏰 공성전 메뉴에 접속했습니다.'); toggleView('castleView'); renderCastleTab(new Date().getDay()); }
+    else if (menu === 'raid') { logActivity('🐉 강림원정대 메뉴에 접속했습니다.'); toggleView('raidView'); renderRaidTab('태오'); }
     else alert('해당 메뉴는 준비 중입니다!');
 }
 
@@ -177,14 +192,12 @@ function renderAdminView() {
     const sortSelect = document.getElementById('userSortSelect');
     const sortType = sortSelect ? sortSelect.value : 'join_asc';
 
-    // 선택된 기준에 따른 정렬 로직
     approvedUsers.sort((a, b) => {
         if (sortType.startsWith('name')) {
             return sortType.endsWith('asc') ? a.nickname.localeCompare(b.nickname) : b.nickname.localeCompare(a.nickname);
         } else if (sortType.startsWith('role')) {
             return sortType.endsWith('asc') ? roleWeight[b.role] - roleWeight[a.role] : roleWeight[a.role] - roleWeight[b.role];
         } else {
-            // 가입순 (usersDB 배열의 인덱스 기준)
             const idxA = usersDB.indexOf(a); const idxB = usersDB.indexOf(b);
             return sortType.endsWith('asc') ? idxA - idxB : idxB - idxA;
         }
@@ -201,11 +214,13 @@ function renderAdminView() {
         let manageBtns = '';
         const canManage = roleWeight[currentUser.role] > roleWeight[u.role];
         
-        // 본인보다 권한이 낮은 길드원에게만 닉네임 변경 및 강퇴 버튼 노출
         if (canManage) { 
             manageBtns = `
-                <button class="btn-sm" style="background:#3498db; margin-bottom: 2px;" onclick="adminAction('${u.id}', 'changeNick')">닉네임 변경</button>
-                <button class="btn-sm" style="background:#c0392b;" onclick="adminAction('${u.id}', 'kick')">강퇴</button>
+                <div style="display:flex; flex-direction:row; gap:5px; justify-content:center;">
+                    <button class="btn-sm" style="background:#3498db; margin:0;" onclick="adminAction('${u.id}', 'changeNick')">✏️ 닉네임</button>
+                    <button class="btn-sm" style="background:#27ae60; margin:0;" onclick="viewUserLogs('${u.id}')">📋 로그</button>
+                    <button class="btn-sm" style="background:#c0392b; margin:0;" onclick="adminAction('${u.id}', 'kick')">🚪 강퇴</button>
+                </div>
             `; 
         } else { 
             manageBtns = `<span style="color:#7f8c8d; font-size:12px;">권한 없음</span>`; 
@@ -229,7 +244,6 @@ function adminAction(userId, action, extraValue) {
             const finalNick = newNick.trim();
             usersDB[userIndex].nickname = finalNick;
             
-            // 모든 덱 데이터베이스의 작성자 닉네임도 일괄 업데이트
             mockDefenseDecks.forEach(d => { if(d.authorId === userId) d.authorNick = finalNick; });
             mockAttackDecks.forEach(d => { if(d.authorId === userId) d.authorNick = finalNick; d.counters.forEach(c => { if(c.authorId === userId) c.authorNick = finalNick; }); });
             mockCastleDecks.forEach(d => { if(d.authorId === userId) d.authorNick = finalNick; });
@@ -305,7 +319,17 @@ function renderCastleTab(dayIdx) {
         contentDiv.innerHTML = `<div style="text-align:center; padding: 40px 20px; background: white; border-radius: 10px; border: 1px dashed #bdc3c7;"><h3 style="color: #7f8c8d; margin-bottom: 10px;">아직 등록된 족보가 없습니다.</h3><p style="font-size: 14px; color: #95a5a6;">관리자 및 길드장 권한만 등록 가능합니다.</p>${addBtn}</div>`;
     }
 }
-function deleteCastleDeck(dayIdx) { if(confirm("정말 이 공성전 빌드를 삭제하시겠습니까?")) { const idx = mockCastleDecks.findIndex(d => d.day === dayIdx); if(idx !== -1) { db.collection('castleDecks').doc(String(mockCastleDecks[idx].id)).delete(); mockCastleDecks.splice(idx, 1); } saveDecksDB(); renderCastleTab(dayIdx); } }
+
+function deleteCastleDeck(dayIdx) { 
+    if(confirm("정말 이 공성전 빌드를 삭제하시겠습니까?")) { 
+        const idx = mockCastleDecks.findIndex(d => d.day === dayIdx); 
+        if(idx !== -1) { db.collection('castleDecks').doc(String(mockCastleDecks[idx].id)).delete(); mockCastleDecks.splice(idx, 1); } 
+        
+        logActivity(`🗑️ ${dayNames[dayIdx]}요일 공성전 빌드를 삭제했습니다.`); // 💡 삭제 로그 추가
+        saveDecksDB(); 
+        renderCastleTab(dayIdx); 
+    } 
+}
 
 /* 🐉 강림원정대 렌더링 */
 function renderRaidTab(bossName) {
@@ -431,7 +455,6 @@ function viewDeckDetail(type, id1, id2) {
         raidContent.style.display = 'block';
         speedOrderDiv.style.display = 'none';
         
-        // 💡 1라운드 스킬, 2라운드 스킬 독립적 로드 (기존 합쳐진 데이터 호환용 방어코드 포함)
         const r1Skills = viewingDeck.r1.skills || (viewingDeck.skills ? viewingDeck.skills.filter(s => viewingDeck.r1.slots.includes(s.hero)) : []);
         const r2Skills = viewingDeck.r2.skills || (viewingDeck.skills ? viewingDeck.skills.filter(s => viewingDeck.r2.slots.includes(s.hero)) : []);
 
@@ -449,7 +472,6 @@ function viewDeckDetail(type, id1, id2) {
             return html;
         };
 
-        // 💡 직관적인 상하 배치 (1R스킬 -> 2R스킬 -> 1R보드 -> 2R보드)
         raidContent.innerHTML = `
             <div style="background: white; padding: 20px; border-radius: 10px; border: 1px solid #ddd; margin-bottom:20px;">
                 <div style="display: flex; flex-direction: column; gap: 30px;">
@@ -550,8 +572,28 @@ function handleBuilderBackBtn() {
     else { toggleView('mainListView'); } 
 }
 
-function deleteAttackTarget(targetId) { if(confirm("이 적 방어 덱과 하위의 카운터 덱이 모두 삭제됩니다.\n정말 삭제하시겠습니까?")) { const idx = mockAttackDecks.findIndex(d => d.id === targetId); if(idx !== -1) { db.collection('attackDecks').doc(String(targetId)).delete(); mockAttackDecks.splice(idx, 1); } saveDecksDB(); switchMainTab('attack'); } }
-function deleteCounterDeck(targetId, counterId) { if(confirm("이 카운터 덱을 정말 삭제하시겠습니까?")) { const target = mockAttackDecks.find(d => d.id === targetId); const idx = target.counters.findIndex(c => c.id === counterId); if(idx !== -1) target.counters.splice(idx, 1); saveDecksDB(); switchMainTab('attack'); } }
+function deleteAttackTarget(targetId) { 
+    if(confirm("이 적 방어 덱과 하위의 카운터 덱이 모두 삭제됩니다.\n정말 삭제하시겠습니까?")) { 
+        const idx = mockAttackDecks.findIndex(d => d.id === targetId); 
+        if(idx !== -1) { db.collection('attackDecks').doc(String(targetId)).delete(); mockAttackDecks.splice(idx, 1); } 
+        
+        logActivity(`🗑️ 길드전 적 방어 덱을 삭제했습니다.`); // 💡 삭제 로그 추가
+        saveDecksDB(); 
+        switchMainTab('attack'); 
+    } 
+}
+
+function deleteCounterDeck(targetId, counterId) { 
+    if(confirm("이 카운터 덱을 정말 삭제하시겠습니까?")) { 
+        const target = mockAttackDecks.find(d => d.id === targetId); 
+        const idx = target.counters.findIndex(c => c.id === counterId); 
+        if(idx !== -1) target.counters.splice(idx, 1); 
+        
+        logActivity(`🗑️ 길드전 카운터 덱을 삭제했습니다.`); // 💡 삭제 로그 추가
+        saveDecksDB(); 
+        switchMainTab('attack'); 
+    } 
+}
 
 function deleteCurrentDeck() {
     if(confirm("정말 이 덱을 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.")) {
@@ -560,16 +602,19 @@ function deleteCurrentDeck() {
         if (viewingDeckType === 'defense') { 
             const idx = mockDefenseDecks.findIndex(d => d.id === viewingDeck.id); 
             if(idx !== -1) { db.collection('defenseDecks').doc(String(viewingDeck.id)).delete(); mockDefenseDecks.splice(idx, 1); } 
+            logActivity(`🗑️ 길드전 방어 추천 덱을 삭제했습니다.`); // 💡 삭제 로그 추가
         } 
         else if (viewingDeckType === 'raid') { 
             const idx = mockRaidDecks.findIndex(d => d.id === viewingDeck.id); 
             if(idx !== -1) { db.collection('raidDecks').doc(String(viewingDeck.id)).delete(); mockRaidDecks.splice(idx, 1); } 
             targetView = 'raidView';
+            logActivity(`🗑️ 강림원정대 빌드를 삭제했습니다.`); // 💡 삭제 로그 추가
         }
         else { 
             const target = mockAttackDecks.find(d => d.id === currentTargetDeckId); 
             const idx = target.counters.findIndex(c => c.id === viewingDeck.id); 
             if(idx !== -1) target.counters.splice(idx, 1); 
+            logActivity(`🗑️ 길드전 카운터 덱을 삭제했습니다.`); // 💡 삭제 로그 추가
         }
         
         saveDecksDB(); 
@@ -598,6 +643,10 @@ function voteCounter(targetId, counterId, type) {
     if (!isHighRank) { const lastVoteTime = counter.votes ? counter.votes[currentUser.id] : 0; if (lastVoteTime && (Date.now() - lastVoteTime) < 48 * 60 * 60 * 1000) { return alert("승패 기록은 48시간에 한 번만 투표할 수 있습니다."); } }
     if (!counter.votes) counter.votes = {}; counter.votes[currentUser.id] = Date.now();
     if (type === 'win') counter.wins = (counter.wins || 0) + 1; else counter.losses = (counter.losses || 0) + 1;
+    
+    const voteResult = type === 'win' ? '승리' : '패배';
+    logActivity(`투표 ➡️ 카운터 덱 승패 투표에 참여했습니다. (${voteResult})`); // 💡 승/패 결과 포함 기록
+    
     saveDecksDB(); switchMainTab('attack'); 
 }
 
@@ -659,7 +708,6 @@ function openDeckBuilder(mode, targetId = null, counterId = null, dayIdx = null,
                 document.getElementById('raidSpeed1').value = (viewingDeck.r1 && viewingDeck.r1.speedOrder) || '';
                 document.getElementById('raidSpeed2').value = (viewingDeck.r2 && viewingDeck.r2.speedOrder) || '';
                 
-                // 💡 기존 스킬이 합쳐져 있던 경우 분리해주는 호환성 코드
                 raidDataBuffer[1] = JSON.parse(JSON.stringify(viewingDeck.r1 || { slots: [], pet: null, equips: {}, skills: [] })); 
                 if(!raidDataBuffer[1].skills && viewingDeck.skills) { raidDataBuffer[1].skills = viewingDeck.skills.filter(s => raidDataBuffer[1].slots.includes(s.hero)); }
                 
@@ -760,14 +808,14 @@ function saveCurrentRaidRound() {
         pet: currentSelectedPet, 
         equips: JSON.parse(JSON.stringify(heroEquipments)), 
         formation: document.getElementById('formationType').value,
-        skills: [...skillQueue] // 💡 이제 각 라운드마다 독립적으로 스킬을 저장합니다!
+        skills: [...skillQueue]
     };
 }
 
 function loadRaidRoundToBuilder(round) {
     currentRaidRound = round; const data = raidDataBuffer[round];
     boardSlots = [...data.slots]; currentSelectedPet = data.pet; heroEquipments = JSON.parse(JSON.stringify(data.equips)); document.getElementById('formationType').value = data.formation || 'basic';
-    skillQueue = data.skills ? [...data.skills] : []; // 💡 스킬도 독립적으로 로드
+    skillQueue = data.skills ? [...data.skills] : []; 
     renderBuilderBoard(); applyFilters();
 }
 
@@ -781,14 +829,14 @@ function handleBuilderNextBtn() {
 
 function loadRaidDetailRound(round) {
     saveCurrentRaidRound(); 
-    loadRaidRoundToBuilder(round); // 보드 슬롯과 스킬 큐가 선택한 라운드의 것으로 변경됨
+    loadRaidRoundToBuilder(round); 
     
     document.getElementById('btn-detail-r1').style.background = round === 1 ? '#34495e' : '#bdc3c7'; document.getElementById('btn-detail-r1').style.color = round === 1 ? 'white' : '#2c3e50';
     document.getElementById('btn-detail-r2').style.background = round === 2 ? '#34495e' : '#bdc3c7'; document.getElementById('btn-detail-r2').style.color = round === 2 ? 'white' : '#2c3e50';
     
     const tempDeck = { formation: document.getElementById('formationType').value, slots: boardSlots, pet: currentSelectedPet, equips: heroEquipments };
     renderReadonlyBoard('detailInputHeroBoard', 'detailInputPetSlot', tempDeck, true, true);
-    renderAvailableSkills(); // 여기서 렌더링될 때 현재 로드된 해당 라운드의 영웅들만 보입니다!
+    renderAvailableSkills();
 }
 
 function switchBuilderTab(tab) {
@@ -834,8 +882,6 @@ function renderReadonlyBoard(boardId, petId, deckData, isEditMode = false, isCas
 
 function renderAvailableSkills() {
     const container = document.getElementById('availableSkills'); container.innerHTML = '';
-    
-    // 💡 이제 현재 보고있는 슬롯(현재 라운드)의 영웅만 뜹니다!
     let heroes = boardSlots.filter(h => h !== null);
     
     if(!builderMode.startsWith('raid')) {
@@ -1028,8 +1074,9 @@ function saveDeck() {
                 deck.r2 = JSON.parse(JSON.stringify(raidDataBuffer[2]));
                 deck.r1.speedOrder = document.getElementById('raidSpeed1').value.trim();
                 deck.r2.speedOrder = document.getElementById('raidSpeed2').value.trim();
-                delete deck.skills; // 💡 기존의 통합된 스킬 데이터는 더 이상 쓰지 않도록 지웁니다.
+                delete deck.skills; 
                 alert(`✅ 강림원정대 빌드가 수정되었습니다!`);
+                logActivity('🛠️ 강림원정대 빌드를 수정했습니다.');
             }
         } else {
             const newR1 = JSON.parse(JSON.stringify(raidDataBuffer[1]));
@@ -1042,6 +1089,7 @@ function saveDeck() {
                 authorId: currentUser.id, authorNick: currentUser.nickname 
             });
             alert(`✅ 강림원정대 빌드가 등록되었습니다!`);
+            logActivity('✨ 새로운 강림원정대 빌드를 등록했습니다.');
         }
         saveDecksDB(); toggleView('raidView'); renderRaidTab(currentRaidBoss); return;
     }
@@ -1049,9 +1097,15 @@ function saveDeck() {
     if (builderMode.startsWith('castle')) {
         if(builderMode === 'castle_edit') {
             const deck = mockCastleDecks.find(d => d.day === currentCastleDay);
-            if(deck) { deck.desc = deckDesc; deck.speedOrder = speedOrder; deck.formation = document.getElementById('formationType').value; deck.slots = [...boardSlots]; deck.pet = currentSelectedPet; deck.equips = JSON.parse(JSON.stringify(heroEquipments)); deck.skills = [...skillQueue]; alert(`✅ ${dayNames[currentCastleDay]}요일 공성전 빌드가 수정되었습니다!`); }
+            if(deck) { 
+                deck.desc = deckDesc; deck.speedOrder = speedOrder; deck.formation = document.getElementById('formationType').value; deck.slots = [...boardSlots]; deck.pet = currentSelectedPet; deck.equips = JSON.parse(JSON.stringify(heroEquipments)); deck.skills = [...skillQueue]; 
+                alert(`✅ ${dayNames[currentCastleDay]}요일 공성전 빌드가 수정되었습니다!`); 
+                logActivity('🛠️ 공성전 빌드를 수정했습니다.'); 
+            }
         } else {
-            mockCastleDecks.push({ id: Date.now(), day: currentCastleDay, desc: deckDesc, speedOrder: speedOrder, formation: document.getElementById('formationType').value, slots: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname }); alert(`✅ ${dayNames[currentCastleDay]}요일 공성전 빌드가 등록되었습니다!`);
+            mockCastleDecks.push({ id: Date.now(), day: currentCastleDay, desc: deckDesc, speedOrder: speedOrder, formation: document.getElementById('formationType').value, slots: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname }); 
+            alert(`✅ ${dayNames[currentCastleDay]}요일 공성전 빌드가 등록되었습니다!`); 
+            logActivity('✨ 새로운 공성전 빌드를 등록했습니다.'); 
         }
         saveDecksDB(); toggleView('castleView'); renderCastleTab(currentCastleDay); return;
     }
@@ -1059,20 +1113,123 @@ function saveDeck() {
     if (builderMode.startsWith('attack_target')) {
         const targetName = document.getElementById('attackDeckNameInput').value.trim();
         if(!targetName) return alert('적 방어 덱 이름을 입력해주세요.'); if(boardSlots.filter(h => h !== null).length === 0) return alert("🚨 최소 1명 이상의 영웅을 배치해주세요.");
-        if (builderMode === 'attack_target_edit') { const target = mockAttackDecks.find(d => d.id === currentTargetDeckId); target.targetName = targetName; target.formation = document.getElementById('formationType').value; target.targetHeroes = [...boardSlots]; target.targetPet = currentSelectedPet; alert(`✅ '${targetName}' 덱이 성공적으로 수정되었습니다!`); } 
-        else { mockAttackDecks.push({ id: Date.now(), targetName: targetName, formation: document.getElementById('formationType').value, targetHeroes: [...boardSlots], targetPet: currentSelectedPet, counters: [], authorId: currentUser.id, authorNick: currentUser.nickname }); alert(`✅ 적 방어 덱 '${targetName}'이(가) 등록되었습니다!`); }
+        if (builderMode === 'attack_target_edit') { 
+            const target = mockAttackDecks.find(d => d.id === currentTargetDeckId); target.targetName = targetName; target.formation = document.getElementById('formationType').value; target.targetHeroes = [...boardSlots]; target.targetPet = currentSelectedPet; 
+            alert(`✅ '${targetName}' 덱이 성공적으로 수정되었습니다!`); 
+            logActivity('🛠️ 길드전 적 방어 덱을 수정했습니다.'); 
+        } else { 
+            mockAttackDecks.push({ id: Date.now(), targetName: targetName, formation: document.getElementById('formationType').value, targetHeroes: [...boardSlots], targetPet: currentSelectedPet, counters: [], authorId: currentUser.id, authorNick: currentUser.nickname }); 
+            alert(`✅ 적 방어 덱 '${targetName}'이(가) 등록되었습니다!`); 
+            logActivity('✨ 길드전 새로운 적 방어 덱을 등록했습니다.'); 
+        }
         saveDecksDB(); toggleView('mainListView'); return;
     }
 
     if (builderMode.startsWith('attack_counter')) {
         const target = mockAttackDecks.find(d => d.id === currentTargetDeckId);
-        if (builderMode === 'attack_counter_edit') { const counter = target.counters.find(c => c.id === currentCounterDeckId); counter.desc = deckDesc; counter.formation = document.getElementById('formationType').value; counter.heroes = [...boardSlots]; counter.pet = currentSelectedPet; counter.equips = JSON.parse(JSON.stringify(heroEquipments)); counter.skills = [...skillQueue]; alert(`✅ 카운터 덱이 성공적으로 수정되었습니다!`); } 
-        else { target.counters.push({ id: Date.now(), desc: deckDesc, formation: document.getElementById('formationType').value, heroes: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname, wins: 0, losses: 0, createdAt: Date.now(), votes: {} }); alert(`✅ 카운터 덱이 성공적으로 등록되었습니다!`); }
+        if (builderMode === 'attack_counter_edit') { 
+            const counter = target.counters.find(c => c.id === currentCounterDeckId); counter.desc = deckDesc; counter.formation = document.getElementById('formationType').value; counter.heroes = [...boardSlots]; counter.pet = currentSelectedPet; counter.equips = JSON.parse(JSON.stringify(heroEquipments)); counter.skills = [...skillQueue]; 
+            alert(`✅ 카운터 덱이 성공적으로 수정되었습니다!`); 
+            logActivity('🛠️ 길드전 카운터 덱을 수정했습니다.'); 
+        } else { 
+            target.counters.push({ id: Date.now(), desc: deckDesc, formation: document.getElementById('formationType').value, heroes: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname, wins: 0, losses: 0, createdAt: Date.now(), votes: {} }); 
+            alert(`✅ 카운터 덱이 성공적으로 등록되었습니다!`); 
+            logActivity('✨ 길드전 새로운 카운터 덱을 등록했습니다.'); 
+        }
         saveDecksDB(); toggleView('mainListView'); return;
     }
 
     const deckConcept = document.getElementById('deckConceptSelect').value;
-    if(builderMode === 'defense_edit' && viewingDeck) { viewingDeck.name = deckName; viewingDeck.desc = deckDesc; viewingDeck.concept = deckConcept; viewingDeck.formation = document.getElementById('formationType').value; viewingDeck.slots = [...boardSlots]; viewingDeck.pet = currentSelectedPet; viewingDeck.equips = JSON.parse(JSON.stringify(heroEquipments)); viewingDeck.skills = [...skillQueue]; alert(`✅ '${deckName}' 덱이 성공적으로 수정되었습니다!`); } 
-    else { mockDefenseDecks.push({ id: Date.now(), name: deckName, desc: deckDesc, concept: deckConcept, formation: document.getElementById('formationType').value, slots: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname }); alert(`✅ '${deckName}' 덱이 성공적으로 추가되었습니다!`); }
+    if(builderMode === 'defense_edit' && viewingDeck) { 
+        viewingDeck.name = deckName; viewingDeck.desc = deckDesc; viewingDeck.concept = deckConcept; viewingDeck.formation = document.getElementById('formationType').value; viewingDeck.slots = [...boardSlots]; viewingDeck.pet = currentSelectedPet; viewingDeck.equips = JSON.parse(JSON.stringify(heroEquipments)); viewingDeck.skills = [...skillQueue]; 
+        alert(`✅ '${deckName}' 덱이 성공적으로 수정되었습니다!`); 
+        logActivity('🛠️ 길드전 방어 추천 덱을 수정했습니다.'); 
+    } else { 
+        mockDefenseDecks.push({ id: Date.now(), name: deckName, desc: deckDesc, concept: deckConcept, formation: document.getElementById('formationType').value, slots: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname }); 
+        alert(`✅ '${deckName}' 덱이 성공적으로 추가되었습니다!`); 
+        logActivity('✨ 길드전 새로운 방어 추천 덱을 등록했습니다.'); 
+    }
     saveDecksDB(); toggleView('mainListView');
 }
+
+// ==========================================
+// 📊 길드원 접속 및 활동 로그 시스템
+// ==========================================
+let currentLogData = [];
+let currentLogPage = 1;
+const logsPerPage = 10;
+
+function logActivity(actionDesc) {
+    if (!currentUser) return;
+    const logEntry = { userId: currentUser.id, nickname: currentUser.nickname, action: actionDesc, timestamp: Date.now() };
+    db.collection('activityLogs').add(logEntry);
+}
+
+async function viewUserLogs(userId) {
+    const user = usersDB.find(u => u.id === userId);
+    if (!user) return;
+    
+    document.getElementById('logModalTitle').innerText = `[${user.nickname}] 님의 활동 로그`;
+    const lastLoginDate = user.lastLogin ? new Date(user.lastLogin).toLocaleString() : '기록 없음';
+    document.getElementById('logModalLastLogin').innerHTML = `<strong>최근 접속 일시:</strong> <span style="color:#3498db;">${lastLoginDate}</span>`;
+    
+    const logListEl = document.getElementById('logModalList');
+    logListEl.innerHTML = '<div style="text-align:center; padding: 20px; color:#7f8c8d;">로그 데이터를 불러오는 중입니다... ⏳</div>';
+    document.getElementById('userLogModal').style.display = 'flex';
+    document.getElementById('logPrevBtn').style.display = 'none';
+    document.getElementById('logNextBtn').style.display = 'none';
+    document.getElementById('logPageInfo').style.display = 'none';
+
+    try {
+        const snap = await db.collection('activityLogs').where('userId', '==', userId).get();
+        currentLogData = [];
+        snap.forEach(doc => currentLogData.push(doc.data()));
+        currentLogData.sort((a,b) => b.timestamp - a.timestamp); // 최신순 정렬
+        
+        currentLogPage = 1;
+        renderLogPage();
+    } catch(error) {
+        console.error(error);
+        logListEl.innerHTML = '<div style="text-align:center; padding: 20px; color:#e74c3c;">로그를 불러오는데 실패했습니다.</div>';
+    }
+}
+
+function renderLogPage() {
+    const logListEl = document.getElementById('logModalList');
+    const totalPages = Math.ceil(currentLogData.length / logsPerPage) || 1;
+    
+    const startIndex = (currentLogPage - 1) * logsPerPage;
+    const endIndex = startIndex + logsPerPage;
+    const pageData = currentLogData.slice(startIndex, endIndex);
+    
+    let html = '<ul style="list-style:none; padding:0; margin:0; font-size:13px;">';
+    if (pageData.length === 0) {
+        html += '<li style="padding:10px; text-align:center; color:#7f8c8d;">활동 내역이 없습니다.</li>';
+    } else {
+        pageData.forEach(data => {
+            const timeStr = new Date(data.timestamp).toLocaleString();
+            html += `<li style="padding:10px 0; border-bottom:1px dashed #ddd;">
+                        <span style="color:#95a5a6; font-size:11px; display:block; margin-bottom:3px;">🕒 ${timeStr}</span>
+                        <span style="color:#2c3e50; font-weight:bold;">${data.action}</span>
+                     </li>`;
+        });
+    }
+    html += '</ul>';
+    logListEl.innerHTML = html;
+
+    document.getElementById('logPageInfo').innerText = `${currentLogPage} / ${totalPages}`;
+    document.getElementById('logPageInfo').style.display = 'inline-block';
+    
+    document.getElementById('logPrevBtn').style.display = currentLogPage > 1 ? 'inline-block' : 'none';
+    document.getElementById('logNextBtn').style.display = currentLogPage < totalPages ? 'inline-block' : 'none';
+}
+
+function changeLogPage(delta) {
+    const totalPages = Math.ceil(currentLogData.length / logsPerPage) || 1;
+    currentLogPage += delta;
+    if (currentLogPage < 1) currentLogPage = 1;
+    if (currentLogPage > totalPages) currentLogPage = totalPages;
+    renderLogPage();
+}
+
+function closeUserLogModal() { document.getElementById('userLogModal').style.display = 'none'; }

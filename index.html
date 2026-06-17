@@ -298,6 +298,30 @@
     </div>
 </div>
 
+<div id="userLogModal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <h3 id="logModalTitle" style="color: #2c3e50; border-bottom: 2px solid #2c3e50; padding-bottom: 10px; margin-top:0;">활동 로그</h3>
+        
+        <div id="logModalLastLogin" style="background: #fdfae6; padding: 10px; border-radius: 5px; border: 1px solid #f1c40f; margin-bottom: 15px; font-size: 13px; text-align: center;">
+            <strong>최근 접속 일시:</strong> 불러오는 중...
+        </div>
+        
+        <div style="min-height: 200px; max-height: 300px; overflow-y: auto; background: #fafafa; border: 1px solid #ddd; border-radius: 5px; padding: 10px; margin-bottom: 15px;">
+            <div id="logModalList"></div>
+        </div>
+        
+        <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 15px;">
+            <button class="btn-sm" id="logPrevBtn" onclick="changeLogPage(-1)" style="background:#34495e; margin:0;">◀ 이전</button>
+            <span id="logPageInfo" style="font-size: 13px; font-weight: bold; color: #2c3e50;">1 / 1</span>
+            <button class="btn-sm" id="logNextBtn" onclick="changeLogPage(1)" style="background:#34495e; margin:0;">다음 ▶</button>
+        </div>
+        
+        <div style="text-align: right;">
+            <button class="btn" onclick="closeUserLogModal()" style="background: #95a5a6; color: white;">닫기</button>
+        </div>
+    </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
 
