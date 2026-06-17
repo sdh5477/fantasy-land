@@ -212,7 +212,7 @@ function renderAdminView() {
         }
     });
 
-    // 💡 페이징 처리 로직 추가
+    // 💡 페이징 처리 로직
     const totalPages = Math.ceil(approvedUsers.length / usersPerPage) || 1;
     if (currentUserPage < 1) currentUserPage = 1;
     if (currentUserPage > totalPages) currentUserPage = totalPages;
@@ -229,27 +229,26 @@ function renderAdminView() {
             roleDisplay = getRoleName(u.role); 
         }
         
-        let manageBtns = '';
-        const canManage = roleWeight[currentUser.role] > roleWeight[u.role];
+        // 💡 관리 기능과 로그 확인 기능의 권한 분리
+        const canManage = roleWeight[currentUser.role] > roleWeight[u.role];  // 닉네임, 강퇴: 본인보다 낮아야 함
+        const canViewLog = roleWeight[currentUser.role] >= roleWeight[u.role]; // 로그 확인: 본인 권한 이하(같거나 낮음)면 가능
         
-        if (canManage) { 
-            manageBtns = `
-                <div style="display:flex; flex-direction:row; gap:5px; justify-content:center;">
-                    <button class="btn-sm" style="background:#3498db; margin:0;" onclick="adminAction('${u.id}', 'changeNick')">✏️ 닉네임</button>
-                    <button class="btn-sm" style="background:#27ae60; margin:0;" onclick="viewUserLogs('${u.id}')">📋 로그</button>
-                    <button class="btn-sm" style="background:#c0392b; margin:0;" onclick="adminAction('${u.id}', 'kick')">🚪 강퇴</button>
-                </div>
-            `; 
-        } else { 
+        let manageBtns = '<div style="display:flex; flex-direction:row; gap:5px; justify-content:center;">';
+        if (canManage) manageBtns += `<button class="btn-sm" style="background:#3498db; margin:0;" onclick="adminAction('${u.id}', 'changeNick')">✏️ 닉네임</button>`;
+        if (canViewLog) manageBtns += `<button class="btn-sm" style="background:#27ae60; margin:0;" onclick="viewUserLogs('${u.id}')">📋 로그</button>`;
+        if (canManage) manageBtns += `<button class="btn-sm" style="background:#c0392b; margin:0;" onclick="adminAction('${u.id}', 'kick')">🚪 강퇴</button>`;
+        manageBtns += '</div>';
+
+        if (!canManage && !canViewLog) { 
             manageBtns = `<span style="color:#7f8c8d; font-size:12px;">권한 없음</span>`; 
         }
+        
         approvedTbody.innerHTML += `<tr><td>${u.id}</td><td>${u.nickname}</td><td>${roleDisplay}</td><td>${manageBtns}</td></tr>`;
     });
 
     if(pendingTbody.innerHTML === '') pendingTbody.innerHTML = '<tr><td colspan="4">대기 중인 인원이 없습니다.</td></tr>';
     if(approvedTbody.innerHTML === '') approvedTbody.innerHTML = '<tr><td colspan="4">관리 가능한 길드원이 없습니다.</td></tr>';
 
-    // 💡 페이징 컨트롤 화면 업데이트
     const prevBtn = document.getElementById('userPrevBtn');
     const nextBtn = document.getElementById('userNextBtn');
     const pageInfo = document.getElementById('userPageInfo');
@@ -1198,6 +1197,13 @@ function logActivity(actionDesc) {
 async function viewUserLogs(userId) {
     const user = usersDB.find(u => u.id === userId);
     if (!user) return;
+    
+    // 💡 로그 확인 시 서버 단에서도 본인 권한 이하인지 체크
+    const roleWeight = { 'admin': 4, 'master': 3, 'elite': 2, 'user': 1 };
+    if (roleWeight[currentUser.role] < roleWeight[user.role]) {
+        alert('본인보다 높은 권한의 길드원 로그는 확인할 수 없습니다.');
+        return;
+    }
     
     document.getElementById('logModalTitle').innerText = `[${user.nickname}] 님의 활동 로그`;
     const lastLoginDate = user.lastLogin ? new Date(user.lastLogin).toLocaleString() : '기록 없음';
