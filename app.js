@@ -1,46 +1,56 @@
-let usersDB = JSON.parse(localStorage.getItem('usersDB'));
+// 길드장님의 '환상의 나라' 전용 Firebase 마스터키
+const firebaseConfig = {
+    apiKey: "AIzaSyApVlmFxaeKGUDY4rtBbc7KEwbu4J5XdVM",
+    authDomain: "fantasy-land-c0ffc.firebaseapp.com",
+    projectId: "fantasy-land-c0ffc",
+    storageBucket: "fantasy-land-c0ffc.firebasestorage.app",
+    messagingSenderId: "898927815648",
+    appId: "1:898927815648:web:b421a2dc4cf00425625985"
+};
 
-// 💡 관리자 계정 1개만 남기도록 수정
-if (!usersDB) {
-    usersDB = [
-        { id: 'adminadmin', pw: '54775477a.', nickname: '최고관리자', role: 'admin', status: 'approved' }
-    ];
-    localStorage.setItem('usersDB', JSON.stringify(usersDB));
-}
+// Firebase 및 Firestore 데이터베이스 초기화 (호환 모드)
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
+// 전역 데이터 변수 (이제 임시저장소가 아닌 서버에서 불러옵니다)
+let usersDB = [];
+let mockDefenseDecks = [];
+let mockAttackDecks = [];
+
+// 로그인 유지는 기기마다 달라야 하므로 localStorage 유지
 let currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
-
-function saveUsersDB() { localStorage.setItem('usersDB', JSON.stringify(usersDB)); }
 function saveCurrentUser() { localStorage.setItem('currentUser', JSON.stringify(currentUser)); }
 
-// 💡 덱 예시 데이터도 새로운 최고관리자 아이디에 맞게 권한 연동
-let mockDefenseDecks = JSON.parse(localStorage.getItem('mockDefenseDecks')) || [
-    { 
-        id: 1, name: "국민 밸런스 방덱", concept: "속내실", formation: "balance", 
-        slots: ["루디", "카린", null, "제이브", null], pet: "루", desc: "가장 무난하고 생존력이 높은 방어 덱입니다.",
-        equips: { "루디": { set: "수호자", mainOpt: "방방받받", accMain: "불사", accSub: "권능", ex: ["방어력(%)","생명력(%)"] }, "제이브": { set: "추적자", mainOpt: "치확치피", accMain: "권능", accSub: "없음", ex: ["모든 공격력(%)"] } },
-        skills: ["루디 스킬 1", "제이브 스킬 2", "카린 스킬 1"], authorId: "adminadmin", authorNick: "최고관리자"
-    }
-];
-
-let mockAttackDecks = JSON.parse(localStorage.getItem('mockAttackDecks')) || [
-    { 
-        id: 1001, targetName: "밀스실", formation: "basic", targetHeroes: ["밀리아", "스파이크", null, "실베스타", null], targetPet: "더지", 
-        authorId: "adminadmin", authorNick: "최고관리자",
-        counters: [
-            {
-                id: 2001, heroes: ["델론즈", "태오", null, "연희", null], pet: "리첼", desc: "이게 가장 승률이 좋습니다. 침묵 먼저 걸어주세요.",
-                authorId: "adminadmin", authorNick: "최고관리자", formation: "basic",
-                wins: 15, losses: 3, createdAt: Date.now() - 100000, votes: {},
-                equips: {}, skills: ["델론즈 스킬 1", "연희 스킬 2"]
-            }
-        ]
-    }
-];
+// 🔄 데이터베이스 동기화 함수들
+function saveUsersDB() {
+    usersDB.forEach(u => db.collection('users').doc(u.id).set(u));
+}
 
 function saveDecksDB() { 
-    localStorage.setItem('mockDefenseDecks', JSON.stringify(mockDefenseDecks)); 
-    localStorage.setItem('mockAttackDecks', JSON.stringify(mockAttackDecks));
+    mockDefenseDecks.forEach(d => db.collection('defenseDecks').doc(String(d.id)).set(d)); 
+    mockAttackDecks.forEach(d => db.collection('attackDecks').doc(String(d.id)).set(d));
+}
+
+// ⏳ 서버에서 데이터를 불러오는 초기화 함수
+async function initDB() {
+    // 1. 유저 정보 불러오기
+    const usersSnap = await db.collection('users').get();
+    usersSnap.forEach(doc => usersDB.push(doc.data()));
+
+    // DB가 완전히 비어있다면 최고관리자 계정 1개 생성 후 서버에 저장
+    if (usersDB.length === 0) {
+        const adminData = { id: 'adminadmin', pw: '54775477a.', nickname: '최고관리자', role: 'admin', status: 'approved' };
+        await db.collection('users').doc(adminData.id).set(adminData);
+        usersDB.push(adminData);
+    }
+
+    // 2. 방어 추천 덱 불러오기
+    const defSnap = await db.collection('defenseDecks').get();
+    defSnap.forEach(doc => mockDefenseDecks.push(doc.data()));
+
+    // 3. 공격 추천 덱(상대 방어덱+카운터) 불러오기
+    const attSnap = await db.collection('attackDecks').get();
+    attSnap.forEach(doc => mockAttackDecks.push(doc.data()));
 }
 
 let boardSlots = [null, null, null, null, null];
@@ -74,7 +84,7 @@ function getMiniHeroHTML(name, type="hero") {
 }
 function getRoleName(role) { switch(role) { case 'admin': return '관리자'; case 'master': return '길드장'; case 'elite': return '정예 길드원'; case 'user': return '길드원'; default: return '길드원'; } }
 function getConceptClass(concept) { if(concept === '속공') return 'concept-sokgong'; if(concept === '속내실') return 'concept-soknaesil'; if(concept === '내실') return 'concept-naesil'; return 'concept-none'; }
-function getRoleColor(role) { switch(role) { case '공격형': return '#e74c3c'; case '마법형': return '#3498db'; case '방어형': return '#8d6e63'; case '지원형': return '#f1c40f'; case '만능형': return '#9b59b6'; default: return '#3498db'; } }
+function getRoleColor(role) { switch(role) { case '공격형': return '#e74c3c'; case '마법형': return '#3498db'; case '방어형': return '#8d6e63'; case '지원형': return '#f1c40f'; case '만능형': return '#9b59b6'; default: return '#9b59b6'; } }
 
 function updateHeader() {
     const authArea = document.getElementById('headerAuthArea');
@@ -101,7 +111,9 @@ function attemptSignup() {
     const id = document.getElementById('signupId').value.trim(); const pw = document.getElementById('signupPw').value.trim(); const nick = document.getElementById('signupNick').value.trim();
     if(!id || !pw || !nick) return alert('아이디, 비밀번호, 닉네임을 모두 입력해야 합니다.');
     if(usersDB.find(u => u.id === id)) return alert('이미 존재하는 아이디입니다.');
-    usersDB.push({ id: id, pw: pw, nickname: nick, role: 'user', status: 'pending' }); saveUsersDB();
+    const newUser = { id: id, pw: pw, nickname: nick, role: 'user', status: 'pending' };
+    usersDB.push(newUser); 
+    db.collection('users').doc(newUser.id).set(newUser); // DB에 즉시 저장
     alert('가입 신청이 완료되었습니다! 관리자의 승인 후 로그인할 수 있습니다.');
     document.getElementById('signupId').value = ''; document.getElementById('signupPw').value = ''; document.getElementById('signupNick').value = ''; toggleView('loginView');
 }
@@ -122,8 +134,12 @@ function changeNickname() {
 
 function leaveGuild() {
     if(confirm("정말 길드를 탈퇴하시겠습니까?\n탈퇴 시 계정이 삭제되며 복구할 수 없습니다.")) {
-        const userIndex = usersDB.findIndex(u => u.id === currentUser.id); if(userIndex !== -1) usersDB.splice(userIndex, 1);
-        saveUsersDB(); currentUser = null; saveCurrentUser();
+        const userIndex = usersDB.findIndex(u => u.id === currentUser.id); 
+        if(userIndex !== -1) {
+            db.collection('users').doc(currentUser.id).delete(); // DB 서버에서 삭제
+            usersDB.splice(userIndex, 1);
+        }
+        currentUser = null; saveCurrentUser();
         alert("길드 탈퇴가 완료되었습니다. 그동안 감사했습니다."); closeProfileModal(); toggleView('homeView');
     }
 }
@@ -138,7 +154,7 @@ function renderAdminView() {
     const pendingTbody = document.querySelector('#pendingUsersTable tbody'); const approvedTbody = document.querySelector('#approvedUsersTable tbody');
     pendingTbody.innerHTML = ''; approvedTbody.innerHTML = '';
     usersDB.forEach(u => {
-        if(u.id === 'adminadmin') return; // 기본 아이디는 리스트에서 제외 (자가 강퇴 방지)
+        if(u.id === 'adminadmin') return; 
         
         if(u.status === 'pending') {
             pendingTbody.innerHTML += `<tr><td>${u.id}</td><td>${u.nickname}</td><td><span class="badge-status" style="background:#f1c40f; color:#333;">대기중</span></td><td><button class="btn-sm" style="background:#27ae60;" onclick="adminAction('${u.id}', 'approve')">승인</button> <button class="btn-sm" style="background:#c0392b;" onclick="adminAction('${u.id}', 'reject')">거절</button></td></tr>`;
@@ -158,11 +174,20 @@ function renderAdminView() {
 
 function adminAction(userId, action, extraValue) {
     const userIndex = usersDB.findIndex(u => u.id === userId); if(userIndex === -1) return;
-    if(action === 'approve') { usersDB[userIndex].status = 'approved'; alert(`${usersDB[userIndex].nickname}님의 가입을 승인했습니다.`); }
-    else if(action === 'reject') { if(confirm(`${usersDB[userIndex].nickname}님의 신청을 거절(삭제)하시겠습니까?`)) usersDB.splice(userIndex, 1); }
-    else if(action === 'kick') { if(confirm(`정말 ${usersDB[userIndex].nickname}님을 강퇴시키겠습니까?\n강퇴 시 해당 아이디로 접속할 수 없습니다.`)) { usersDB[userIndex].status = 'kicked'; alert('강퇴 처리되었습니다.'); } }
-    else if(action === 'changeRole') { usersDB[userIndex].role = extraValue; alert(`${usersDB[userIndex].nickname}님의 권한이 [${getRoleName(extraValue)}]로 변경되었습니다.`); }
-    saveUsersDB(); renderAdminView();
+    if(action === 'approve') { usersDB[userIndex].status = 'approved'; alert(`${usersDB[userIndex].nickname}님의 가입을 승인했습니다.`); saveUsersDB(); }
+    else if(action === 'reject') { 
+        if(confirm(`${usersDB[userIndex].nickname}님의 신청을 거절(삭제)하시겠습니까?`)) { 
+            db.collection('users').doc(userId).delete(); // DB 삭제
+            usersDB.splice(userIndex, 1); 
+        } 
+    }
+    else if(action === 'kick') { 
+        if(confirm(`정말 ${usersDB[userIndex].nickname}님을 강퇴시키겠습니까?\n강퇴 시 해당 아이디로 접속할 수 없습니다.`)) { 
+            usersDB[userIndex].status = 'kicked'; alert('강퇴 처리되었습니다.'); saveUsersDB();
+        } 
+    }
+    else if(action === 'changeRole') { usersDB[userIndex].role = extraValue; alert(`${usersDB[userIndex].nickname}님의 권한이 [${getRoleName(extraValue)}]로 변경되었습니다.`); saveUsersDB(); }
+    renderAdminView();
 }
 
 function toggleView(viewId) {
@@ -178,7 +203,9 @@ function toggleView(viewId) {
     if (viewId === 'adminView') renderAdminView(); 
 }
 
-window.onload = function() { 
+// ⏳ 웹페이지가 열릴 때 DB를 먼저 싹 불러온 후 화면을 띄웁니다
+window.onload = async function() { 
+    await initDB(); 
     updateHeader();
     const savedView = localStorage.getItem('currentView') || 'homeView';
     toggleView(savedView);
@@ -218,7 +245,7 @@ function switchMainTab(tabType) {
 
         let html = '';
         mockAttackDecks.forEach(deck => {
-            const targetHtml = deck.targetHeroes.filter(h=>h).map(h => getMiniHeroHTML(h)).join('');
+            const targetHtml = (deck.targetHeroes || []).filter(h=>h).map(h => getMiniHeroHTML(h)).join('');
             const canEditTarget = isHighRank || (currentUser && deck.authorId === currentUser.id);
             
             let targetEditHtml = canEditTarget ? `
@@ -264,7 +291,7 @@ function switchMainTab(tabType) {
                         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                             <div>
                                 <div style="font-size: 13px; font-weight: bold; color: #e74c3c; margin-bottom: 5px;">🔥 카운터 조합</div>
-                                <div class="mini-hero-list">${c.heroes.filter(h=>h).map(h => getMiniHeroHTML(h)).join('')}<span style="font-size: 18px; margin: 0 5px;">+</span>${getMiniHeroHTML(c.pet, "pet")}</div>
+                                <div class="mini-hero-list">${c.heroes.filter(h=>h).map(h => getMiniHeroHTML(h)).join('')}<span style="font-size: 18px; margin: 0 5px;">+</span>${c.pet ? getMiniHeroHTML(c.pet, "pet") : ''}</div>
                             </div>
                             <div style="text-align:right;">
                                 <div style="font-size: 20px; font-weight: 900; color: ${rateColor};">${winRate}%</div>
@@ -324,17 +351,18 @@ function switchMainTab(tabType) {
         addBtn.innerText = '+ 방어 추천 덱 추가하기';
 
         mockDefenseDecks.forEach(deck => {
-            const heroHtml = deck.slots.filter(h => h).map(h => `<img src="./images/heroes/${h}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">`).join('');
+            const heroHtml = (deck.slots || []).filter(h => h).map(h => `<img src="./images/heroes/${h}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">`).join('');
             const conceptClass = getConceptClass(deck.concept);
+            const petHtml = deck.pet ? `<img src="./images/pets/${deck.pet}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">` : '';
             
             content.innerHTML += `
                 <div class="defense-deck" onclick="viewDeckDetail('defense', ${deck.id})">
                     <div>
-                        <div style="font-weight: bold; color: #2980b9; margin-bottom: 5px;">${deck.name || '이름 없는 방어 덱'} <span class="badge-concept ${conceptClass}" style="font-size:10px;">${deck.concept}</span></div>
+                        <div style="font-weight: bold; color: #2980b9; margin-bottom: 5px;">${deck.name || '이름 없는 방어 덱'} <span class="badge-concept ${conceptClass}" style="font-size:10px;">${deck.concept !== '상관없음' ? deck.concept : ''}</span></div>
                         <div style="font-size: 13px; color: #555;">💡 ${deck.desc || '설명이 없습니다.'}</div>
                     </div>
                     <div class="mini-hero-list">
-                        ${heroHtml} <span style="font-size: 18px; margin: 0 5px;">+</span> <img src="./images/pets/${deck.pet}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">
+                        ${heroHtml} <span style="font-size: 18px; margin: 0 5px;">+</span> ${petHtml}
                     </div>
                 </div>
             `;
@@ -351,9 +379,11 @@ function viewDeckDetail(type, id1, id2) {
         viewingDeck = mockDefenseDecks.find(d => d.id === id1);
         if (!viewingDeck) return;
         document.getElementById('detailDeckTitle').innerText = viewingDeck.name || '이름 없는 방어 덱';
-        conceptBadge.style.display = 'inline-block';
-        conceptBadge.className = `badge-concept ${getConceptClass(viewingDeck.concept)}`;
-        conceptBadge.innerText = viewingDeck.concept;
+        if (viewingDeck.concept && viewingDeck.concept !== '상관없음') {
+            conceptBadge.style.display = 'inline-block';
+            conceptBadge.className = `badge-concept ${getConceptClass(viewingDeck.concept)}`;
+            conceptBadge.innerText = viewingDeck.concept;
+        } else { conceptBadge.style.display = 'none'; }
         currentTargetDeckId = null;
         currentCounterDeckId = null;
     } else {
@@ -395,9 +425,10 @@ function viewDeckDetail(type, id1, id2) {
 
 function handleAddNewDeckBtn() {
     if (currentMainTab === 'attack') {
-        if (!['admin', 'master', 'elite'].includes(currentUser.role)) return alert('🚨 적 방어덱 등록은 정예 길드원 이상만 가능합니다.');
+        if (!currentUser || !['admin', 'master', 'elite'].includes(currentUser.role)) return alert('🚨 적 방어덱 등록은 정예 길드원 이상만 가능합니다.');
         openDeckBuilder('attack_target_new');
     } else {
+        if (!currentUser) return alert('로그인이 필요합니다.');
         openDeckBuilder('defense_new');
     }
 }
@@ -405,7 +436,10 @@ function handleAddNewDeckBtn() {
 function deleteAttackTarget(targetId) {
     if(confirm("이 적 방어 덱과 하위의 카운터 덱이 모두 삭제됩니다.\n정말 삭제하시겠습니까?")) {
         const idx = mockAttackDecks.findIndex(d => d.id === targetId);
-        if(idx !== -1) mockAttackDecks.splice(idx, 1);
+        if(idx !== -1) {
+            db.collection('attackDecks').doc(String(targetId)).delete(); // 서버에서 문서 삭제
+            mockAttackDecks.splice(idx, 1);
+        }
         saveDecksDB(); switchMainTab('attack');
     }
 }
@@ -423,7 +457,10 @@ function deleteCurrentDeck() {
     if(confirm("정말 이 덱을 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.")) {
         if (viewingDeckType === 'defense') {
             const idx = mockDefenseDecks.findIndex(d => d.id === viewingDeck.id);
-            if(idx !== -1) mockDefenseDecks.splice(idx, 1);
+            if(idx !== -1) {
+                db.collection('defenseDecks').doc(String(viewingDeck.id)).delete(); // 서버에서 삭제
+                mockDefenseDecks.splice(idx, 1);
+            }
         } else {
             const target = mockAttackDecks.find(d => d.id === currentTargetDeckId);
             const idx = target.counters.findIndex(c => c.id === viewingDeck.id);
@@ -460,7 +497,7 @@ function voteCounter(targetId, counterId, type) {
     if (type === 'win') counter.wins = (counter.wins || 0) + 1;
     else counter.losses = (counter.losses || 0) + 1;
 
-    saveDecksDB();
+    saveDecksDB(); // DB 자동 업데이트
     switchMainTab('attack'); 
 }
 
@@ -658,6 +695,7 @@ function createExSelectHTML(index, val) {
 function addExField() { if(currentExCount < 4) { document.getElementById('exContainer').insertAdjacentHTML('beforeend', createExSelectHTML(currentExCount, '없음')); currentExCount++; updateAddExBtn(); } }
 function updateAddExBtn() { document.getElementById('addExBtn').style.display = currentExCount >= 4 ? 'none' : 'inline-block'; }
 
+let currentEditingHero = null;
 function openEquipModal(heroName, isReadOnly) {
     currentEditingHero = heroName; 
     document.getElementById('equipModalTitle').innerText = `${heroName} 장비 세팅`; 
