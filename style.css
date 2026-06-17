@@ -7,7 +7,7 @@ header { background-color: #2c3e50; color: white; padding: 20px; text-align: cen
 .btn-primary:hover { background-color: #2980b9; }
 .btn-back { background:#e74c3c; color:white; margin-bottom:20px; }
 
-#homeView, #mainListView, #deckBuilderView, #deckDetailView, #loginView, #signupView, #adminView { display: none; } 
+#homeView, #mainListView, #deckBuilderView, #deckDetailView, #loginView, #signupView, #adminView, #castleView { display: none; } 
 
 .auth-area { position: absolute; right: 20px; top: 20px; font-size: 14px; }
 .btn-sm { padding: 5px 10px; font-size: 12px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px; }
@@ -113,7 +113,6 @@ header { background-color: #2c3e50; color: white; padding: 20px; text-align: cen
 .split-input > * { flex: 1; }
 .ex-select { width: 100%; }
 
-/* 💡 조회 모드일 때 가독성을 위해 예쁜 박스 형태로 수정 (화살표는 숨김) */
 .equip-form select:disabled, .equip-form input:disabled {
     background: #ecf0f1;
     border: 1px solid #bdc3c7;
@@ -128,4 +127,95 @@ header { background-color: #2c3e50; color: white; padding: 20px; text-align: cen
     border-radius: 5px;
     text-align: center;
     cursor: default;
+}
+
+.castle-tabs {
+    display: flex;
+    justify-content: space-between;
+    overflow-x: auto;
+    border-bottom: 2px solid #bdc3c7;
+    margin-bottom: 20px;
+    padding-bottom: 5px;
+}
+.castle-tabs .tab-btn {
+    padding: 10px 15px;
+    font-size: 14px;
+    white-space: nowrap;
+    border-bottom: 3px solid transparent;
+}
+.castle-tabs .tab-btn.active {
+    color: #8e44ad;
+    border-bottom-color: #8e44ad;
+}
+.castle-tabs::-webkit-scrollbar {
+    display: none; 
+}
+
+.skill-grid-20 {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 25px 8px; 
+    justify-content: center;
+    margin: 0 auto;
+}
+.skill-grid-3 {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+}
+
+@media (max-width: 650px) {
+    .skill-grid-20 { gap: 20px 3px; }
+    /* 💡 모바일 화면에서도 깨지지 않게 최적화된 사이즈 */
+    .skill-slot.castle-slot { width: 42px; height: 42px; } 
+    .skill-slot.castle-slot .skill-text-label { font-size: 9px; bottom: -16px; }
+}
+
+.skill-slot {
+    width: 60px; height: 60px;
+    background-color: #bdc3c7;
+    border: 2px dashed #95a5a6;
+    border-radius: 8px;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    cursor: pointer; transition: 0.2s; position: relative;
+}
+
+/* 💡 PC 화면에서 공성전 스킬 슬롯 크기 82px 적용! */
+.skill-slot.castle-slot { width: 82px; height: 82px; }
+
+.skill-slot.empty {
+    background-color: #f4f7f6;
+}
+.skill-slot.filled {
+    border-style: solid;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+.skill-slot.filled:hover { opacity: 0.8; transform: translateY(-2px); }
+
+/* 🎨 라운드별 배경 색상 (눈이 편안한 파스텔 빨, 노, 파) */
+.round-1 { background-color: #ffe5e5 !important; border-color: #ffb3c6 !important; }
+.round-2 { background-color: #fff9c4 !important; border-color: #fde047 !important; }
+.round-3 { background-color: #dbeafe !important; border-color: #93c5fd !important; }
+
+.skill-text-label {
+    position: absolute;
+    bottom: -18px;
+    color: #2c3e50;
+    font-weight: 900;
+    font-size: 11px;
+    width: 100%;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.hero-board.castle-layout {
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+.hero-board.castle-layout .formation-line {
+    flex-direction: row;
+    gap: 15px;
+    justify-content: center;
+    width: 100%;
 }

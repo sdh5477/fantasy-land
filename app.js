@@ -16,19 +16,20 @@ const db = firebase.firestore();
 let usersDB = [];
 let mockDefenseDecks = [];
 let mockAttackDecks = [];
+let mockCastleDecks = []; // 🏰 공성전 데이터 저장소
 
-// 로그인 유지는 기기마다 달라야 하므로 localStorage 유지
+const dayNames = { 1: '월', 2: '화', 3: '수', 4: '목', 5: '금', 6: '토', 0: '일' };
+
 let currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
 function saveCurrentUser() { localStorage.setItem('currentUser', JSON.stringify(currentUser)); }
 
 // 🔄 데이터베이스 동기화 함수들
-function saveUsersDB() {
-    usersDB.forEach(u => db.collection('users').doc(u.id).set(u));
-}
+function saveUsersDB() { usersDB.forEach(u => db.collection('users').doc(u.id).set(u)); }
 
 function saveDecksDB() { 
     mockDefenseDecks.forEach(d => db.collection('defenseDecks').doc(String(d.id)).set(d)); 
     mockAttackDecks.forEach(d => db.collection('attackDecks').doc(String(d.id)).set(d));
+    mockCastleDecks.forEach(d => db.collection('castleDecks').doc(String(d.id)).set(d)); 
 }
 
 // ⏳ 서버에서 데이터를 불러오는 초기화 함수
@@ -37,7 +38,6 @@ async function initDB() {
         const usersSnap = await db.collection('users').get();
         usersSnap.forEach(doc => usersDB.push(doc.data()));
 
-        // 💡 최고관리자 보장 로직: 유저 수와 상관없이 DB에 'adminadmin'이 없다면 무조건 생성!
         if (!usersDB.find(u => u.id === 'adminadmin')) {
             const adminData = { id: 'adminadmin', pw: '54775477a.', nickname: '최고관리자', role: 'admin', status: 'approved' };
             await db.collection('users').doc(adminData.id).set(adminData);
@@ -49,20 +49,19 @@ async function initDB() {
 
         const attSnap = await db.collection('attackDecks').get();
         attSnap.forEach(doc => mockAttackDecks.push(doc.data()));
+        
+        const castleSnap = await db.collection('castleDecks').get();
+        castleSnap.forEach(doc => mockCastleDecks.push(doc.data()));
 
     } catch (error) {
         console.error("Firebase 연결 오류:", error);
     } finally {
         updateHeader();
-        // ✅ 이전 화면 기억 기능을 끄고, 처음 접속 시 무조건 메인 화면(homeView)을 띄우도록 수정
         toggleView('homeView');
     }
 }
 
-// 웹페이지가 열릴 때 DB를 불러옵니다
-window.onload = function() { 
-    initDB(); 
-};
+window.onload = function() { initDB(); };
 
 let boardSlots = [null, null, null, null, null];
 let activeSlotIndex = 0; 
@@ -78,6 +77,7 @@ let currentMainTab = 'defense';
 let builderMode = 'defense_new'; 
 let currentTargetDeckId = null;
 let currentCounterDeckId = null;
+let currentCastleDay = 1; 
 let attackSortMode = 'winrate'; 
 let openAccordionIds = [];
 
@@ -87,6 +87,7 @@ const exEquipOptions = ["없음", "모든 공격력(%)", "방어력(%)", "생명
 function resetBuilderState() {
     boardSlots = [null, null, null, null, null]; activeSlotIndex = 0; currentSelectedPet = null; activeSlotType = 'hero'; heroEquipments = {}; skillQueue = []; currentExCount = 1; viewingDeck = null; currentTargetDeckId = null; currentCounterDeckId = null; viewingDeckType = 'defense';
     document.getElementById('deckConceptSelect').value = '상관없음'; document.getElementById('deckNameInput').value = ''; document.getElementById('deckDescInput').value = ''; document.getElementById('attackDeckNameInput').value = ''; document.getElementById('formationType').value = 'basic';
+    document.getElementById('deckSpeedOrderInput').value = ''; // 💡 속공 순서 입력칸 초기화
 }
 
 function getMiniHeroHTML(name, type="hero") {
@@ -123,8 +124,7 @@ function attemptSignup() {
     if(!id || !pw || !nick) return alert('아이디, 비밀번호, 닉네임을 모두 입력해야 합니다.');
     if(usersDB.find(u => u.id === id)) return alert('이미 존재하는 아이디입니다.');
     const newUser = { id: id, pw: pw, nickname: nick, role: 'user', status: 'pending' };
-    usersDB.push(newUser); 
-    db.collection('users').doc(newUser.id).set(newUser); // DB에 즉시 저장
+    usersDB.push(newUser); db.collection('users').doc(newUser.id).set(newUser);
     alert('가입 신청이 완료되었습니다! 관리자의 승인 후 로그인할 수 있습니다.');
     document.getElementById('signupId').value = ''; document.getElementById('signupPw').value = ''; document.getElementById('signupNick').value = ''; toggleView('loginView');
 }
@@ -137,19 +137,18 @@ function changeNickname() {
     const userIndex = usersDB.findIndex(u => u.id === currentUser.id); if(userIndex !== -1) usersDB[userIndex].nickname = newNick;
     mockDefenseDecks.forEach(d => { if(d.authorId === currentUser.id) d.authorNick = newNick; });
     mockAttackDecks.forEach(d => { if(d.authorId === currentUser.id) d.authorNick = newNick; d.counters.forEach(c => { if(c.authorId === currentUser.id) c.authorNick = newNick; }); });
+    mockCastleDecks.forEach(d => { if(d.authorId === currentUser.id) d.authorNick = newNick; });
     currentUser.nickname = newNick; saveUsersDB(); saveCurrentUser(); saveDecksDB();
     alert(`닉네임이 '${newNick}'(으)로 변경되었습니다!`); closeProfileModal(); updateHeader();
     if(document.getElementById('mainListView').style.display === 'block') switchMainTab(currentMainTab);
+    if(document.getElementById('castleView').style.display === 'block') renderCastleTab(currentCastleDay);
     if(document.getElementById('deckDetailView').style.display === 'block') document.getElementById('detailDeckAuthor').innerText = `작성자: ${newNick}`;
 }
 
 function leaveGuild() {
     if(confirm("정말 길드를 탈퇴하시겠습니까?\n탈퇴 시 계정이 삭제되며 복구할 수 없습니다.")) {
         const userIndex = usersDB.findIndex(u => u.id === currentUser.id); 
-        if(userIndex !== -1) {
-            db.collection('users').doc(currentUser.id).delete(); // DB 서버에서 삭제
-            usersDB.splice(userIndex, 1);
-        }
+        if(userIndex !== -1) { db.collection('users').doc(currentUser.id).delete(); usersDB.splice(userIndex, 1); }
         currentUser = null; saveCurrentUser();
         alert("길드 탈퇴가 완료되었습니다. 그동안 감사했습니다."); closeProfileModal(); toggleView('homeView');
     }
@@ -157,7 +156,9 @@ function leaveGuild() {
 
 function enterMenu(menu) {
     if (!currentUser) { alert('🚨 길드원 전용 메뉴입니다. 로그인을 먼저 해주세요!'); toggleView('loginView'); return; }
-    if (menu === 'guildWar') toggleView('mainListView'); else alert('해당 메뉴는 준비 중입니다!');
+    if (menu === 'guildWar') toggleView('mainListView'); 
+    else if (menu === 'castle') { toggleView('castleView'); renderCastleTab(new Date().getDay()); }
+    else alert('해당 메뉴는 준비 중입니다!');
 }
 
 function renderAdminView() {
@@ -166,14 +167,12 @@ function renderAdminView() {
     pendingTbody.innerHTML = ''; approvedTbody.innerHTML = '';
     usersDB.forEach(u => {
         if(u.id === 'adminadmin') return; 
-        
         if(u.status === 'pending') {
             pendingTbody.innerHTML += `<tr><td>${u.id}</td><td>${u.nickname}</td><td><span class="badge-status" style="background:#f1c40f; color:#333;">대기중</span></td><td><button class="btn-sm" style="background:#27ae60;" onclick="adminAction('${u.id}', 'approve')">승인</button> <button class="btn-sm" style="background:#c0392b;" onclick="adminAction('${u.id}', 'reject')">거절</button></td></tr>`;
         } else if(u.status === 'approved') {
             let roleDisplay = '';
-            if (currentUser.role === 'admin') {
-                roleDisplay = `<select onchange="adminAction('${u.id}', 'changeRole', this.value)" style="padding: 3px; font-size: 12px; outline: none; border: 1px solid #bdc3c7;"><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>관리자</option><option value="master" ${u.role === 'master' ? 'selected' : ''}>길드장</option><option value="elite" ${u.role === 'elite' ? 'selected' : ''}>정예 길드원</option><option value="user" ${u.role === 'user' ? 'selected' : ''}>길드원</option></select>`;
-            } else { roleDisplay = getRoleName(u.role); }
+            if (currentUser.role === 'admin') { roleDisplay = `<select onchange="adminAction('${u.id}', 'changeRole', this.value)" style="padding: 3px; font-size: 12px; outline: none; border: 1px solid #bdc3c7;"><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>관리자</option><option value="master" ${u.role === 'master' ? 'selected' : ''}>길드장</option><option value="elite" ${u.role === 'elite' ? 'selected' : ''}>정예 길드원</option><option value="user" ${u.role === 'user' ? 'selected' : ''}>길드원</option></select>`; } 
+            else { roleDisplay = getRoleName(u.role); }
             let kickBtn = '';
             if (currentUser.role === 'admin' || (currentUser.role === 'master' && !['admin', 'master'].includes(u.role))) { kickBtn = `<button class="btn-sm" style="background:#c0392b;" onclick="adminAction('${u.id}', 'kick')">강퇴(탈퇴)</button>`; } else { kickBtn = `<span style="color:#7f8c8d; font-size:12px;">권한 없음</span>`; }
             approvedTbody.innerHTML += `<tr><td>${u.id}</td><td>${u.nickname}</td><td>${roleDisplay}</td><td>${kickBtn}</td></tr>`;
@@ -186,188 +185,174 @@ function renderAdminView() {
 function adminAction(userId, action, extraValue) {
     const userIndex = usersDB.findIndex(u => u.id === userId); if(userIndex === -1) return;
     if(action === 'approve') { usersDB[userIndex].status = 'approved'; alert(`${usersDB[userIndex].nickname}님의 가입을 승인했습니다.`); saveUsersDB(); }
-    else if(action === 'reject') { 
-        if(confirm(`${usersDB[userIndex].nickname}님의 신청을 거절(삭제)하시겠습니까?`)) { 
-            db.collection('users').doc(userId).delete(); // DB 삭제
-            usersDB.splice(userIndex, 1); 
-        } 
-    }
-    else if(action === 'kick') { 
-        if(confirm(`정말 ${usersDB[userIndex].nickname}님을 강퇴시키겠습니까?\n강퇴 시 해당 아이디로 접속할 수 없습니다.`)) { 
-            usersDB[userIndex].status = 'kicked'; alert('강퇴 처리되었습니다.'); saveUsersDB();
-        } 
-    }
+    else if(action === 'reject') { if(confirm(`${usersDB[userIndex].nickname}님의 신청을 거절(삭제)하시겠습니까?`)) { db.collection('users').doc(userId).delete(); usersDB.splice(userIndex, 1); } }
+    else if(action === 'kick') { if(confirm(`정말 ${usersDB[userIndex].nickname}님을 강퇴시키겠습니까?\n강퇴 시 해당 아이디로 접속할 수 없습니다.`)) { usersDB[userIndex].status = 'kicked'; alert('강퇴 처리되었습니다.'); saveUsersDB(); } }
     else if(action === 'changeRole') { usersDB[userIndex].role = extraValue; alert(`${usersDB[userIndex].nickname}님의 권한이 [${getRoleName(extraValue)}]로 변경되었습니다.`); saveUsersDB(); }
     renderAdminView();
 }
 
 function toggleView(viewId) {
-    const views = ['homeView', 'mainListView', 'deckBuilderView', 'deckDetailView', 'loginView', 'signupView', 'adminView'];
+    const views = ['homeView', 'mainListView', 'deckBuilderView', 'deckDetailView', 'loginView', 'signupView', 'adminView', 'castleView'];
     views.forEach(id => document.getElementById(id).style.display = 'none');
-    
     document.getElementById(viewId).style.display = 'block';
     updateHeader();
-    
     if(viewId !== 'deckBuilderView') resetBuilderState();
     if (viewId === 'mainListView') switchMainTab(currentMainTab);
     if (viewId === 'adminView') renderAdminView(); 
 }
 
+/* 🏰 공성전 탭 렌더링 함수 */
+function renderCastleTab(dayIdx) {
+    currentCastleDay = dayIdx;
+    const tabs = document.querySelectorAll('.castle-tabs .tab-btn');
+    tabs.forEach(tab => tab.classList.remove('active'));
+    document.getElementById(`c-tab-${dayIdx}`).classList.add('active');
+
+    const contentDiv = document.getElementById('castleListContent');
+    contentDiv.innerHTML = '';
+
+    const deck = mockCastleDecks.find(d => d.day === dayIdx);
+    const isAdminMaster = currentUser && ['admin', 'master'].includes(currentUser.role);
+    
+    if (deck) {
+        let editDeleteBtns = isAdminMaster ? `
+            <div style="text-align: right; margin-bottom: 10px;">
+                <button class="btn" style="background-color: #f39c12; color: white; margin-right: 5px;" onclick="openDeckBuilder('castle_edit', null, null, ${dayIdx})">✏️ 수정</button>
+                <button class="btn" style="background-color: #e74c3c; color: white;" onclick="deleteCastleDeck(${dayIdx})">🗑️ 삭제</button>
+            </div>
+        ` : '';
+
+        let boardHtml = `<div class="board-container"><div class="hero-board" id="castleHeroBoard"></div><div class="pet-slot filled" id="castlePetSlot"></div></div>`;
+        
+        let skillsHtml = '<div class="skill-grid-20">';
+        if (deck.skills && deck.skills.some(s => s !== null)) {
+            deck.skills.forEach((s, idx) => {
+                if (s !== null) {
+                    let hero = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : '');
+                    let skillNum = s.skillNum || (typeof s === 'string' ? s.split(' 스킬 ')[1] : '');
+                    let round = s.round || 1;
+                    skillsHtml += `
+                        <div class="skill-slot filled round-${round} castle-slot" style="cursor:default;" title="${hero} 스킬 ${skillNum}">
+                            <img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;">
+                            <span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span>
+                            <div class="skill-text-label">스킬 ${skillNum}</div>
+                        </div>
+                    `;
+                } else {
+                    skillsHtml += `<div class="skill-slot empty castle-slot" style="cursor:default;"></div>`;
+                }
+            });
+        } else {
+            skillsHtml += '<div style="grid-column: span 10; color:#7f8c8d; font-size:14px; padding: 20px; text-align:center;">설정된 스킬 순서가 없습니다.</div>';
+        }
+        skillsHtml += '</div>';
+
+        // 💡 속공 순서 표시용 문구를 파스텔 톤 주황색(가독성 고려)으로 변경
+        let speedOrderHtml = deck.speedOrder ? `<div style="text-align: center; color: #e67e22; font-size: 14px; margin-bottom: 20px; font-weight: bold;">⚡ 추천 속공 순서: <span style="color:#d35400;">${deck.speedOrder}</span></div>` : '';
+
+        contentDiv.innerHTML = `
+            ${editDeleteBtns}
+            <div style="background: white; padding: 20px; border-radius: 10px; border: 1px solid #ddd;">
+                <h3 style="text-align: center; color: #2c3e50; margin-top: 0;">${dayNames[dayIdx]}요일 공성전 빌드</h3>
+                <div style="text-align: center; color: #555; font-size: 14px; margin-bottom: 10px; font-weight: bold;">💡 ${deck.desc || '설명이 없습니다.'}</div>
+                ${speedOrderHtml}
+                <div style="text-align: right; font-size: 12px; color: #95a5a6; margin-bottom: 10px;">작성자: ${deck.authorNick}</div>
+                
+                <div style="text-align: center; margin-bottom: 20px; background: #fafafa; padding: 15px; padding-bottom: 30px; border-radius: 10px; border: 1px solid #eee;">
+                    <h4 style="color: #8e44ad; margin-top: 0; margin-bottom: 15px;">⚔️ 스킬 순서</h4>
+                    ${skillsHtml}
+                </div>
+
+                ${boardHtml}
+                <div class="memo" style="margin-top: 20px; text-align: center;">💡 <b>장비 정보 조회:</b> 위 보드에서 영웅을 클릭하면 해당 영웅의 장비를 볼 수 있습니다.</div>
+            </div>
+        `;
+        viewingDeck = deck; 
+        renderReadonlyBoard('castleHeroBoard', 'castlePetSlot', deck, false, true);
+    } else {
+        let addBtn = isAdminMaster ? `<button class="btn btn-primary" style="width: 100%; margin-top: 15px;" onclick="openDeckBuilder('castle_new', null, null, ${dayIdx})">+ ${dayNames[dayIdx]}요일 공성전 빌드 등록하기</button>` : '';
+        contentDiv.innerHTML = `
+            <div style="text-align:center; padding: 40px 20px; background: white; border-radius: 10px; border: 1px dashed #bdc3c7;">
+                <h3 style="color: #7f8c8d; margin-bottom: 10px;">아직 등록된 족보가 없습니다.</h3>
+                <p style="font-size: 14px; color: #95a5a6;">관리자 및 길드장 권한만 등록 가능합니다.</p>
+                ${addBtn}
+            </div>
+        `;
+    }
+}
+
+function deleteCastleDeck(dayIdx) {
+    if(confirm("정말 이 공성전 빌드를 삭제하시겠습니까?")) {
+        const idx = mockCastleDecks.findIndex(d => d.day === dayIdx);
+        if(idx !== -1) { db.collection('castleDecks').doc(String(mockCastleDecks[idx].id)).delete(); mockCastleDecks.splice(idx, 1); }
+        saveDecksDB(); renderCastleTab(dayIdx);
+    }
+}
+
 function setAttackSortMode(mode) { attackSortMode = mode; switchMainTab('attack'); }
 
 function toggleAccordion(deckId, element) {
-    const parent = element.parentElement;
-    parent.classList.toggle('open');
-    if (parent.classList.contains('open')) {
-        if (!openAccordionIds.includes(deckId)) openAccordionIds.push(deckId);
-    } else {
-        openAccordionIds = openAccordionIds.filter(id => id !== deckId);
-    }
+    const parent = element.parentElement; parent.classList.toggle('open');
+    if (parent.classList.contains('open')) { if (!openAccordionIds.includes(deckId)) openAccordionIds.push(deckId); } else { openAccordionIds = openAccordionIds.filter(id => id !== deckId); }
 }
 
 function switchMainTab(tabType) {
     currentMainTab = tabType;
-    document.getElementById('tab-attack').classList.remove('active');
-    document.getElementById('tab-defense').classList.remove('active');
-    const content = document.getElementById('deckListContent');
-    content.innerHTML = '';
-    
-    const addBtn = document.getElementById('mainAddDeckBtn');
-    const sortContainer = document.getElementById('attackSortContainer');
+    document.getElementById('tab-attack').classList.remove('active'); document.getElementById('tab-defense').classList.remove('active');
+    const content = document.getElementById('deckListContent'); content.innerHTML = '';
+    const addBtn = document.getElementById('mainAddDeckBtn'); const sortContainer = document.getElementById('attackSortContainer');
 
     if(tabType === 'attack') {
-        document.getElementById('tab-attack').classList.add('active');
-        sortContainer.style.display = 'flex';
+        document.getElementById('tab-attack').classList.add('active'); sortContainer.style.display = 'flex';
         document.getElementById('sortWinRateBtn').className = attackSortMode === 'winrate' ? 'sort-btn active' : 'sort-btn';
         document.getElementById('sortLatestBtn').className = attackSortMode === 'latest' ? 'sort-btn active' : 'sort-btn';
-        
         const isHighRank = currentUser && ['admin', 'master', 'elite'].includes(currentUser.role);
-        addBtn.style.display = isHighRank ? 'block' : 'none';
-        addBtn.innerText = '+ 적 방어 덱 등록하기';
-
+        addBtn.style.display = isHighRank ? 'block' : 'none'; addBtn.innerText = '+ 적 방어 덱 등록하기';
         let html = '';
         mockAttackDecks.forEach(deck => {
             const targetHtml = (deck.targetHeroes || []).filter(h=>h).map(h => getMiniHeroHTML(h)).join('');
             const canEditTarget = isHighRank || (currentUser && deck.authorId === currentUser.id);
-            
-            let targetEditHtml = canEditTarget ? `
-                <div style="text-align: right; margin-bottom: 10px;">
-                    <button class="btn-sm" style="background:#f39c12;" onclick="event.stopPropagation(); openDeckBuilder('attack_target_edit', ${deck.id})">수정</button>
-                    <button class="btn-sm" style="background:#e74c3c;" onclick="event.stopPropagation(); deleteAttackTarget(${deck.id})">삭제</button>
-                </div>
-            ` : '';
+            let targetEditHtml = canEditTarget ? `<div style="text-align: right; margin-bottom: 10px;"><button class="btn-sm" style="background:#f39c12;" onclick="event.stopPropagation(); openDeckBuilder('attack_target_edit', ${deck.id})">수정</button><button class="btn-sm" style="background:#e74c3c;" onclick="event.stopPropagation(); deleteAttackTarget(${deck.id})">삭제</button></div>` : '';
 
             let sortedCounters = [...(deck.counters || [])];
             if (attackSortMode === 'winrate') {
-                sortedCounters.sort((a, b) => {
-                    const rateA = (a.wins + a.losses) === 0 ? 0 : a.wins / (a.wins + a.losses);
-                    const rateB = (b.wins + b.losses) === 0 ? 0 : b.wins / (b.wins + b.losses);
-                    if (rateB !== rateA) return rateB - rateA;
-                    return (b.wins + b.losses) - (a.wins + a.losses);
-                });
+                sortedCounters.sort((a, b) => { const rateA = (a.wins + a.losses) === 0 ? 0 : a.wins / (a.wins + a.losses); const rateB = (b.wins + b.losses) === 0 ? 0 : b.wins / (b.wins + b.losses); if (rateB !== rateA) return rateB - rateA; return (b.wins + b.losses) - (a.wins + a.losses); });
             } else { sortedCounters.sort((a, b) => b.createdAt - a.createdAt); }
 
             let counterHtml = sortedCounters.map(c => {
                 const canEditCounter = isHighRank || (currentUser && c.authorId === currentUser.id);
-                let counterEditHtml = canEditCounter ? `
-                    <button class="btn-sm" style="background:#f39c12;" onclick="event.stopPropagation(); openDeckBuilder('attack_counter_edit', ${deck.id}, ${c.id})">수정</button>
-                    <button class="btn-sm" style="background:#e74c3c;" onclick="event.stopPropagation(); deleteCounterDeck(${deck.id}, ${c.id})">삭제</button>
-                ` : '';
-
+                let counterEditHtml = canEditCounter ? `<button class="btn-sm" style="background:#f39c12;" onclick="event.stopPropagation(); openDeckBuilder('attack_counter_edit', ${deck.id}, ${c.id})">수정</button><button class="btn-sm" style="background:#e74c3c;" onclick="event.stopPropagation(); deleteCounterDeck(${deck.id}, ${c.id})">삭제</button>` : '';
                 const isAdminMaster = currentUser && ['admin', 'master'].includes(currentUser.role);
                 let adminVoteHtml = isAdminMaster ? `<button class="btn-sm" style="background:#8e44ad;" onclick="event.stopPropagation(); openAdminVoteModal(${deck.id}, ${c.id})">⚙️ 승패 임의수정</button>` : '';
-
-                const totalGames = c.wins + c.losses;
-                const winRate = totalGames === 0 ? 0 : Math.round((c.wins / totalGames) * 100);
-
-                let rateColor = '#7f8c8d'; 
-                if (totalGames > 0) {
-                    if (winRate >= 80) rateColor = '#3498db'; 
-                    else if (winRate >= 65) rateColor = '#27ae60'; 
-                    else if (winRate >= 45) rateColor = '#f39c12'; 
-                    else rateColor = '#c0392b'; 
-                }
+                const totalGames = c.wins + c.losses; const winRate = totalGames === 0 ? 0 : Math.round((c.wins / totalGames) * 100);
+                let rateColor = '#7f8c8d'; if (totalGames > 0) { if (winRate >= 80) rateColor = '#3498db'; else if (winRate >= 65) rateColor = '#27ae60'; else if (winRate >= 45) rateColor = '#f39c12'; else rateColor = '#c0392b'; }
 
                 return `
                     <div class="counter-deck" onclick="viewDeckDetail('counter', ${deck.id}, ${c.id})">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                            <div>
-                                <div style="font-size: 13px; font-weight: bold; color: #e74c3c; margin-bottom: 5px;">🔥 카운터 조합</div>
-                                <div class="mini-hero-list">${c.heroes.filter(h=>h).map(h => getMiniHeroHTML(h)).join('')}<span style="font-size: 18px; margin: 0 5px;">+</span>${c.pet ? getMiniHeroHTML(c.pet, "pet") : ''}</div>
-                            </div>
-                            <div style="text-align:right;">
-                                <div style="font-size: 20px; font-weight: 900; color: ${rateColor};">${winRate}%</div>
-                                <div style="font-size: 11px; color: #7f8c8d;">${c.wins}승 ${c.losses}패</div>
-                            </div>
+                            <div><div style="font-size: 13px; font-weight: bold; color: #e74c3c; margin-bottom: 5px;">🔥 카운터 조합</div><div class="mini-hero-list">${c.heroes.filter(h=>h).map(h => getMiniHeroHTML(h)).join('')}<span style="font-size: 18px; margin: 0 5px;">+</span>${c.pet ? getMiniHeroHTML(c.pet, "pet") : ''}</div></div>
+                            <div style="text-align:right;"><div style="font-size: 20px; font-weight: 900; color: ${rateColor};">${winRate}%</div><div style="font-size: 11px; color: #7f8c8d;">${c.wins}승 ${c.losses}패</div></div>
                         </div>
-                        <p style="font-size: 13px; color: #555; margin-top: 10px;">💡 ${c.desc}</p>
-                        <div style="text-align: right; font-size: 11px; color: #95a5a6; margin-top: 5px;">작성자: ${c.authorNick}</div>
+                        <p style="font-size: 13px; color: #555; margin-top: 10px;">💡 ${c.desc}</p><div style="text-align: right; font-size: 11px; color: #95a5a6; margin-top: 5px;">작성자: ${c.authorNick}</div>
                         <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
-                            <div>
-                                <button class="vote-btn vote-win" onclick="event.stopPropagation(); voteCounter(${deck.id}, ${c.id}, 'win')">👍 승리</button>
-                                <button class="vote-btn vote-loss" onclick="event.stopPropagation(); voteCounter(${deck.id}, ${c.id}, 'loss')">👎 패배</button>
-                                ${adminVoteHtml}
-                            </div>
+                            <div><button class="vote-btn vote-win" onclick="event.stopPropagation(); voteCounter(${deck.id}, ${c.id}, 'win')">👍 승리</button><button class="vote-btn vote-loss" onclick="event.stopPropagation(); voteCounter(${deck.id}, ${c.id}, 'loss')">👎 패배</button>${adminVoteHtml}</div>
                             <div onclick="event.stopPropagation();">${counterEditHtml}</div>
                         </div>
                     </div>
                 `;
             }).join('');
-
             if(sortedCounters.length === 0) counterHtml = `<div style="text-align:center; color:#7f8c8d; font-size:13px; padding: 10px;">아직 등록된 카운터 덱이 없습니다.</div>`;
-            
             let addCounterBtn = currentUser ? `<button class="btn" style="width:100%; margin-top:15px; background:#2ecc71; color:white;" onclick="event.stopPropagation(); openDeckBuilder('attack_counter_new', ${deck.id})">+ 카운터 덱 추가하기</button>` : '';
-
             const isOpenClass = openAccordionIds.includes(deck.id) ? 'open' : '';
-
-            html += `
-                <div class="deck-card ${isOpenClass}">
-                    <div class="deck-card-header" onclick="toggleAccordion(${deck.id}, this)">
-                        <div>
-                            <span style="font-size:12px; color:#7f8c8d; font-weight:normal;">적 방어 덱</span><br>
-                            <span style="color:#e74c3c;">${deck.targetName}</span>
-                        </div>
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <div class="mini-hero-list">${targetHtml}</div>
-                            <span>▼</span>
-                        </div>
-                    </div>
-                    <div class="deck-card-body" onclick="event.stopPropagation()">
-                        ${targetEditHtml}
-                        <hr style="border:0; border-top:1px dashed #ddd; margin:15px 0;">
-                        ${counterHtml}
-                        ${addCounterBtn}
-                    </div>
-                </div>
-            `;
+            html += `<div class="deck-card ${isOpenClass}"><div class="deck-card-header" onclick="toggleAccordion(${deck.id}, this)"><div><span style="font-size:12px; color:#7f8c8d; font-weight:normal;">적 방어 덱</span><br><span style="color:#e74c3c;">${deck.targetName}</span></div><div style="display:flex; align-items:center; gap:10px;"><div class="mini-hero-list">${targetHtml}</div><span>▼</span></div></div><div class="deck-card-body" onclick="event.stopPropagation()">${targetEditHtml}<hr style="border:0; border-top:1px dashed #ddd; margin:15px 0;">${counterHtml}${addCounterBtn}</div></div>`;
         });
-        
-        if(mockAttackDecks.length === 0) html += '<p style="text-align:center; padding: 20px; color: #7f8c8d;">등록된 적 방어 덱이 없습니다.</p>';
-        content.innerHTML = html;
-
+        if(mockAttackDecks.length === 0) html += '<p style="text-align:center; padding: 20px; color: #7f8c8d;">등록된 적 방어 덱이 없습니다.</p>'; content.innerHTML = html;
     } else {
-        document.getElementById('tab-defense').classList.add('active');
-        sortContainer.style.display = 'none';
-        
-        addBtn.style.display = 'block';
-        addBtn.innerText = '+ 방어 추천 덱 추가하기';
-
+        document.getElementById('tab-defense').classList.add('active'); sortContainer.style.display = 'none'; addBtn.style.display = 'block'; addBtn.innerText = '+ 방어 추천 덱 추가하기';
         mockDefenseDecks.forEach(deck => {
             const heroHtml = (deck.slots || []).filter(h => h).map(h => `<img src="./images/heroes/${h}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">`).join('');
-            const conceptClass = getConceptClass(deck.concept);
-            const petHtml = deck.pet ? `<img src="./images/pets/${deck.pet}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">` : '';
-            
-            content.innerHTML += `
-                <div class="defense-deck" onclick="viewDeckDetail('defense', ${deck.id})">
-                    <div>
-                        <div style="font-weight: bold; color: #2980b9; margin-bottom: 5px;">${deck.name || '이름 없는 방어 덱'} <span class="badge-concept ${conceptClass}" style="font-size:10px;">${deck.concept !== '상관없음' ? deck.concept : ''}</span></div>
-                        <div style="font-size: 13px; color: #555;">💡 ${deck.desc || '설명이 없습니다.'}</div>
-                    </div>
-                    <div class="mini-hero-list">
-                        ${heroHtml} <span style="font-size: 18px; margin: 0 5px;">+</span> ${petHtml}
-                    </div>
-                </div>
-            `;
+            const conceptClass = getConceptClass(deck.concept); const petHtml = deck.pet ? `<img src="./images/pets/${deck.pet}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">` : '';
+            content.innerHTML += `<div class="defense-deck" onclick="viewDeckDetail('defense', ${deck.id})"><div><div style="font-weight: bold; color: #2980b9; margin-bottom: 5px;">${deck.name || '이름 없는 방어 덱'} <span class="badge-concept ${conceptClass}" style="font-size:10px;">${deck.concept !== '상관없음' ? deck.concept : ''}</span></div><div style="font-size: 13px; color: #555;">💡 ${deck.desc || '설명이 없습니다.'}</div></div><div class="mini-hero-list">${heroHtml} <span style="font-size: 18px; margin: 0 5px;">+</span> ${petHtml}</div></div>`;
         });
         if(mockDefenseDecks.length === 0) content.innerHTML = '<p style="text-align:center; padding: 20px; color: #7f8c8d;">등록된 방어 덱이 없습니다.</p>';
     }
@@ -381,22 +366,14 @@ function viewDeckDetail(type, id1, id2) {
         viewingDeck = mockDefenseDecks.find(d => d.id === id1);
         if (!viewingDeck) return;
         document.getElementById('detailDeckTitle').innerText = viewingDeck.name || '이름 없는 방어 덱';
-        if (viewingDeck.concept && viewingDeck.concept !== '상관없음') {
-            conceptBadge.style.display = 'inline-block';
-            conceptBadge.className = `badge-concept ${getConceptClass(viewingDeck.concept)}`;
-            conceptBadge.innerText = viewingDeck.concept;
-        } else { conceptBadge.style.display = 'none'; }
-        currentTargetDeckId = null;
-        currentCounterDeckId = null;
+        if (viewingDeck.concept && viewingDeck.concept !== '상관없음') { conceptBadge.style.display = 'inline-block'; conceptBadge.className = `badge-concept ${getConceptClass(viewingDeck.concept)}`; conceptBadge.innerText = viewingDeck.concept; } else { conceptBadge.style.display = 'none'; }
+        currentTargetDeckId = null; currentCounterDeckId = null;
     } else {
-        currentTargetDeckId = id1;
-        currentCounterDeckId = id2;
+        currentTargetDeckId = id1; currentCounterDeckId = id2;
         const target = mockAttackDecks.find(d => d.id === id1);
         viewingDeck = target ? target.counters.find(c => c.id === id2) : null;
         if (!viewingDeck) return;
-        
-        document.getElementById('detailDeckTitle').innerText = '🔥 카운터 덱 상세정보';
-        conceptBadge.style.display = 'none'; 
+        document.getElementById('detailDeckTitle').innerText = '🔥 카운터 덱 상세정보'; conceptBadge.style.display = 'none'; 
     }
 
     document.getElementById('detailDeckDesc').innerText = viewingDeck.desc ? `💡 ${viewingDeck.desc}` : '💡 설명이 없습니다.';
@@ -405,168 +382,120 @@ function viewDeckDetail(type, id1, id2) {
     const isAuthor = currentUser && viewingDeck.authorId === currentUser.id;
     const isHighRank = currentUser && ['admin', 'master', 'elite'].includes(currentUser.role);
     const hasPermission = isAuthor || isHighRank;
+    document.getElementById('deleteDeckBtn').style.display = hasPermission ? 'inline-block' : 'none'; document.getElementById('editDeckBtn').style.display = hasPermission ? 'inline-block' : 'none';
 
-    document.getElementById('deleteDeckBtn').style.display = hasPermission ? 'inline-block' : 'none';
-    document.getElementById('editDeckBtn').style.display = hasPermission ? 'inline-block' : 'none';
-
-    renderReadonlyBoard('detailHeroBoard', 'detailPetSlot', viewingDeck);
+    renderReadonlyBoard('detailHeroBoard', 'detailPetSlot', viewingDeck, false, false);
     
-    const skillDiv = document.getElementById('detailSkillQueue');
-    skillDiv.innerHTML = '';
-    if (viewingDeck.skills && viewingDeck.skills.length > 0) {
+    const skillDiv = document.getElementById('detailSkillQueue'); 
+    skillDiv.className = 'skill-grid-3';
+    let skillsHtml = '';
+    
+    if (viewingDeck.skills && viewingDeck.skills.some(s => s !== null)) {
         viewingDeck.skills.forEach(s => {
-            const text = s.replace(' 스킬 ', '<br>스킬 ');
-            skillDiv.innerHTML += `<div class="skill-slot filled" style="cursor:default;">${text}</div>`;
+            if (s !== null) {
+                let hero = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : '');
+                let skillNum = s.skillNum || (typeof s === 'string' ? s.split(' 스킬 ')[1] : '');
+                skillsHtml += `
+                    <div class="skill-slot filled" style="cursor:default;" title="${hero} 스킬 ${skillNum}">
+                        <img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;">
+                        <span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span>
+                        <div class="skill-text-label">스킬 ${skillNum}</div>
+                    </div>
+                `;
+            } else {
+                skillsHtml += `<div class="skill-slot empty" style="cursor:default;"></div>`;
+            }
         });
-    } else {
-        skillDiv.innerHTML = '<div style="color:#7f8c8d; font-size:14px; padding: 20px;">설정된 스킬 예약이 없습니다.</div>';
-    }
-
+    } else { skillsHtml = '<div style="color:#7f8c8d; font-size:14px; padding: 20px; width:100%; text-align:center;">설정된 스킬 순서가 없습니다.</div>'; }
+    skillDiv.innerHTML = skillsHtml;
     toggleView('deckDetailView');
 }
+
+function handleDetailBackBtn() { toggleView('mainListView'); }
 
 function handleAddNewDeckBtn() {
     if (currentMainTab === 'attack') {
         if (!currentUser || !['admin', 'master', 'elite'].includes(currentUser.role)) return alert('🚨 적 방어덱 등록은 정예 길드원 이상만 가능합니다.');
         openDeckBuilder('attack_target_new');
     } else {
-        if (!currentUser) return alert('로그인이 필요합니다.');
-        openDeckBuilder('defense_new');
+        if (!currentUser) return alert('로그인이 필요합니다.'); openDeckBuilder('defense_new');
     }
 }
 
-function deleteAttackTarget(targetId) {
-    if(confirm("이 적 방어 덱과 하위의 카운터 덱이 모두 삭제됩니다.\n정말 삭제하시겠습니까?")) {
-        const idx = mockAttackDecks.findIndex(d => d.id === targetId);
-        if(idx !== -1) {
-            db.collection('attackDecks').doc(String(targetId)).delete(); // 서버에서 문서 삭제
-            mockAttackDecks.splice(idx, 1);
-        }
-        saveDecksDB(); switchMainTab('attack');
-    }
-}
+function handleBuilderBackBtn() { if (builderMode.startsWith('castle')) { toggleView('castleView'); } else { toggleView('mainListView'); } }
 
-function deleteCounterDeck(targetId, counterId) {
-    if(confirm("이 카운터 덱을 정말 삭제하시겠습니까?")) {
-        const target = mockAttackDecks.find(d => d.id === targetId);
-        const idx = target.counters.findIndex(c => c.id === counterId);
-        if(idx !== -1) target.counters.splice(idx, 1);
-        saveDecksDB(); switchMainTab('attack');
-    }
-}
-
+function deleteAttackTarget(targetId) { if(confirm("이 적 방어 덱과 하위의 카운터 덱이 모두 삭제됩니다.\n정말 삭제하시겠습니까?")) { const idx = mockAttackDecks.findIndex(d => d.id === targetId); if(idx !== -1) { db.collection('attackDecks').doc(String(targetId)).delete(); mockAttackDecks.splice(idx, 1); } saveDecksDB(); switchMainTab('attack'); } }
+function deleteCounterDeck(targetId, counterId) { if(confirm("이 카운터 덱을 정말 삭제하시겠습니까?")) { const target = mockAttackDecks.find(d => d.id === targetId); const idx = target.counters.findIndex(c => c.id === counterId); if(idx !== -1) target.counters.splice(idx, 1); saveDecksDB(); switchMainTab('attack'); } }
 function deleteCurrentDeck() {
     if(confirm("정말 이 덱을 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.")) {
-        if (viewingDeckType === 'defense') {
-            const idx = mockDefenseDecks.findIndex(d => d.id === viewingDeck.id);
-            if(idx !== -1) {
-                db.collection('defenseDecks').doc(String(viewingDeck.id)).delete(); // 서버에서 삭제
-                mockDefenseDecks.splice(idx, 1);
-            }
-        } else {
-            const target = mockAttackDecks.find(d => d.id === currentTargetDeckId);
-            const idx = target.counters.findIndex(c => c.id === viewingDeck.id);
-            if(idx !== -1) target.counters.splice(idx, 1);
-        }
-        saveDecksDB(); 
-        alert("✅ 덱이 정상적으로 삭제되었습니다.");
-        resetBuilderState();
-        toggleView('mainListView');
+        if (viewingDeckType === 'defense') { const idx = mockDefenseDecks.findIndex(d => d.id === viewingDeck.id); if(idx !== -1) { db.collection('defenseDecks').doc(String(viewingDeck.id)).delete(); mockDefenseDecks.splice(idx, 1); } } else { const target = mockAttackDecks.find(d => d.id === currentTargetDeckId); const idx = target.counters.findIndex(c => c.id === viewingDeck.id); if(idx !== -1) target.counters.splice(idx, 1); }
+        saveDecksDB(); alert("✅ 덱이 정상적으로 삭제되었습니다."); resetBuilderState(); toggleView('mainListView');
     }
 }
 
-function editCurrentDeck() { 
-    if (viewingDeckType === 'defense') openDeckBuilder('defense_edit');
-    else openDeckBuilder('attack_counter_edit', currentTargetDeckId, viewingDeck.id);
-}
+function editCurrentDeck() { if (viewingDeckType === 'defense') openDeckBuilder('defense_edit'); else openDeckBuilder('attack_counter_edit', currentTargetDeckId, viewingDeck.id); }
 
 function voteCounter(targetId, counterId, type) {
     if (!currentUser) return alert("로그인이 필요합니다.");
-    const target = mockAttackDecks.find(d => d.id === targetId);
-    const counter = target.counters.find(c => c.id === counterId);
-
+    const target = mockAttackDecks.find(d => d.id === targetId); const counter = target.counters.find(c => c.id === counterId);
     const isHighRank = ['admin', 'master'].includes(currentUser.role);
-    if (!isHighRank) {
-        const lastVoteTime = counter.votes ? counter.votes[currentUser.id] : 0;
-        if (lastVoteTime && (Date.now() - lastVoteTime) < 48 * 60 * 60 * 1000) {
-            return alert("승패 기록은 48시간에 한 번만 투표할 수 있습니다.");
-        }
-    }
-
-    if (!counter.votes) counter.votes = {};
-    counter.votes[currentUser.id] = Date.now();
-
-    if (type === 'win') counter.wins = (counter.wins || 0) + 1;
-    else counter.losses = (counter.losses || 0) + 1;
-
-    saveDecksDB(); // DB 자동 업데이트
-    switchMainTab('attack'); 
+    if (!isHighRank) { const lastVoteTime = counter.votes ? counter.votes[currentUser.id] : 0; if (lastVoteTime && (Date.now() - lastVoteTime) < 48 * 60 * 60 * 1000) { return alert("승패 기록은 48시간에 한 번만 투표할 수 있습니다."); } }
+    if (!counter.votes) counter.votes = {}; counter.votes[currentUser.id] = Date.now();
+    if (type === 'win') counter.wins = (counter.wins || 0) + 1; else counter.losses = (counter.losses || 0) + 1;
+    saveDecksDB(); switchMainTab('attack'); 
 }
 
 let adminVoteTargetId = null; let adminVoteCounterId = null;
 function openAdminVoteModal(targetId, counterId) {
-    const target = mockAttackDecks.find(d => d.id === targetId);
-    const counter = target.counters.find(c => c.id === counterId);
-    document.getElementById('adminWinsInput').value = counter.wins || 0;
-    document.getElementById('adminLossesInput').value = counter.losses || 0;
-    adminVoteTargetId = targetId; adminVoteCounterId = counterId;
-    document.getElementById('adminVoteModal').style.display = 'flex';
+    const target = mockAttackDecks.find(d => d.id === targetId); const counter = target.counters.find(c => c.id === counterId);
+    document.getElementById('adminWinsInput').value = counter.wins || 0; document.getElementById('adminLossesInput').value = counter.losses || 0;
+    adminVoteTargetId = targetId; adminVoteCounterId = counterId; document.getElementById('adminVoteModal').style.display = 'flex';
 }
 function closeAdminVoteModal() { document.getElementById('adminVoteModal').style.display = 'none'; }
-function saveAdminVote() {
-    const target = mockAttackDecks.find(d => d.id === adminVoteTargetId);
-    const counter = target.counters.find(c => c.id === adminVoteCounterId);
-    counter.wins = parseInt(document.getElementById('adminWinsInput').value, 10) || 0;
-    counter.losses = parseInt(document.getElementById('adminLossesInput').value, 10) || 0;
-    saveDecksDB(); closeAdminVoteModal(); switchMainTab('attack');
-}
+function saveAdminVote() { const target = mockAttackDecks.find(d => d.id === adminVoteTargetId); const counter = target.counters.find(c => c.id === adminVoteCounterId); counter.wins = parseInt(document.getElementById('adminWinsInput').value, 10) || 0; counter.losses = parseInt(document.getElementById('adminLossesInput').value, 10) || 0; saveDecksDB(); closeAdminVoteModal(); switchMainTab('attack'); }
 
-function openDeckBuilder(mode, targetId = null, counterId = null) {
+function openDeckBuilder(mode, targetId = null, counterId = null, dayIdx = null) {
     resetBuilderState();
     builderMode = mode;
-    currentTargetDeckId = targetId;
-    currentCounterDeckId = counterId;
+    currentTargetDeckId = targetId; currentCounterDeckId = counterId;
 
-    const attackNameContainer = document.getElementById('attackDeckNameContainer');
-    const deckNameContainer = document.getElementById('deckNameContainer');
-    const conceptContainer = document.getElementById('conceptContainer');
-    const detailTabBtn = document.getElementById('b-tab-detail');
-    const nextBtn = document.getElementById('builderNextBtn');
-    const saveAtConfigBtn = document.getElementById('builderSaveBtnAtConfig');
-    const builderTitle = document.getElementById('builderTitle');
+    const attackNameContainer = document.getElementById('attackDeckNameContainer'); const deckNameContainer = document.getElementById('deckNameContainer'); const conceptContainer = document.getElementById('conceptContainer'); const detailTabBtn = document.getElementById('b-tab-detail'); const nextBtn = document.getElementById('builderNextBtn'); const saveAtConfigBtn = document.getElementById('builderSaveBtnAtConfig'); const builderTitle = document.getElementById('builderTitle'); const roundContainer = document.getElementById('roundSelectContainer');
+    const speedOrderContainer = document.getElementById('speedOrderContainer'); 
 
-    if (mode.startsWith('attack_target')) {
-        attackNameContainer.style.display = 'block'; deckNameContainer.style.display = 'none'; conceptContainer.style.display = 'none'; detailTabBtn.style.display = 'none'; nextBtn.style.display = 'none'; saveAtConfigBtn.style.display = 'inline-block';
+    if (mode.startsWith('castle')) {
+        currentCastleDay = dayIdx;
+        attackNameContainer.style.display = 'none'; deckNameContainer.style.display = 'none'; conceptContainer.style.display = 'none'; detailTabBtn.style.display = 'block'; nextBtn.style.display = 'inline-block'; saveAtConfigBtn.style.display = 'none'; roundContainer.style.display = 'block';
+        speedOrderContainer.style.display = 'block'; 
+        builderTitle.innerText = `🛠️ ${dayNames[currentCastleDay]}요일 공성전 빌드 (최대 5명)`;
+        
+        if (mode === 'castle_edit') {
+            const deck = mockCastleDecks.find(d => d.day === dayIdx);
+            if(deck) {
+                document.getElementById('formationType').value = deck.formation || 'basic';
+                boardSlots = [...(deck.slots || [])]; currentSelectedPet = deck.pet; document.getElementById('deckDescInput').value = deck.desc || ''; heroEquipments = JSON.parse(JSON.stringify(deck.equips || {}));
+                document.getElementById('deckSpeedOrderInput').value = deck.speedOrder || ''; 
+                skillQueue = deck.skills ? [...deck.skills] : new Array(20).fill(null);
+                while(skillQueue.length < 20) skillQueue.push(null);
+            }
+        } else { skillQueue = new Array(20).fill(null); }
+    } else if (mode.startsWith('attack_target')) {
+        attackNameContainer.style.display = 'block'; deckNameContainer.style.display = 'none'; conceptContainer.style.display = 'none'; detailTabBtn.style.display = 'none'; nextBtn.style.display = 'none'; saveAtConfigBtn.style.display = 'inline-block'; roundContainer.style.display = 'none';
+        speedOrderContainer.style.display = 'none';
         builderTitle.innerText = mode === 'attack_target_edit' ? '🛠️ 적 방어 덱 수정' : '🛠️ 적 방어 덱 등록';
-        if (mode === 'attack_target_edit') {
-            const target = mockAttackDecks.find(d => d.id === targetId);
-            document.getElementById('attackDeckNameInput').value = target.targetName;
-            document.getElementById('formationType').value = target.formation || 'basic';
-            boardSlots = [...(target.targetHeroes || [])]; currentSelectedPet = target.targetPet;
-        }
+        if (mode === 'attack_target_edit') { const target = mockAttackDecks.find(d => d.id === targetId); document.getElementById('attackDeckNameInput').value = target.targetName; document.getElementById('formationType').value = target.formation || 'basic'; boardSlots = [...(target.targetHeroes || [])]; currentSelectedPet = target.targetPet; }
     } else if (mode.startsWith('attack_counter')) {
-        attackNameContainer.style.display = 'none'; deckNameContainer.style.display = 'none'; conceptContainer.style.display = 'none'; detailTabBtn.style.display = 'block'; nextBtn.style.display = 'inline-block'; saveAtConfigBtn.style.display = 'none';
+        attackNameContainer.style.display = 'none'; deckNameContainer.style.display = 'none'; conceptContainer.style.display = 'none'; detailTabBtn.style.display = 'block'; nextBtn.style.display = 'inline-block'; saveAtConfigBtn.style.display = 'none'; roundContainer.style.display = 'none';
+        speedOrderContainer.style.display = 'none';
         builderTitle.innerText = mode === 'attack_counter_edit' ? '🛠️ 카운터 덱 수정' : '🛠️ 카운터 덱 등록';
-        if (mode === 'attack_counter_edit') {
-            const target = mockAttackDecks.find(d => d.id === targetId);
-            const counter = target.counters.find(c => c.id === counterId);
-            document.getElementById('formationType').value = counter.formation || 'basic';
-            boardSlots = [...(counter.heroes || [])]; currentSelectedPet = counter.pet;
-            document.getElementById('deckDescInput').value = counter.desc || '';
-            heroEquipments = JSON.parse(JSON.stringify(counter.equips || {})); skillQueue = [...(counter.skills || [])];
-        }
+        if (mode === 'attack_counter_edit') { const target = mockAttackDecks.find(d => d.id === targetId); const counter = target.counters.find(c => c.id === counterId); document.getElementById('formationType').value = counter.formation || 'basic'; boardSlots = [...(counter.heroes || [])]; currentSelectedPet = counter.pet; document.getElementById('deckDescInput').value = counter.desc || ''; heroEquipments = JSON.parse(JSON.stringify(counter.equips || {})); skillQueue = counter.skills ? [...counter.skills] : new Array(3).fill(null); while(skillQueue.length < 3) skillQueue.push(null); } else { skillQueue = new Array(3).fill(null); }
     } else {
-        attackNameContainer.style.display = 'none'; deckNameContainer.style.display = 'block'; conceptContainer.style.display = 'block'; detailTabBtn.style.display = 'block'; nextBtn.style.display = 'inline-block'; saveAtConfigBtn.style.display = 'none';
+        attackNameContainer.style.display = 'none'; deckNameContainer.style.display = 'block'; conceptContainer.style.display = 'block'; detailTabBtn.style.display = 'block'; nextBtn.style.display = 'inline-block'; saveAtConfigBtn.style.display = 'none'; roundContainer.style.display = 'none';
+        speedOrderContainer.style.display = 'none';
         builderTitle.innerText = mode === 'defense_edit' ? '🛠️ 방어 덱 수정' : '🛠️ 방어 추천 덱 구성';
-        if (mode === 'defense_edit') {
-            document.getElementById('formationType').value = viewingDeck.formation || 'basic'; boardSlots = [...(viewingDeck.slots || [])]; currentSelectedPet = viewingDeck.pet;
-            document.getElementById('deckNameInput').value = viewingDeck.name || ''; document.getElementById('deckDescInput').value = viewingDeck.desc || ''; document.getElementById('deckConceptSelect').value = viewingDeck.concept || '상관없음';
-            heroEquipments = JSON.parse(JSON.stringify(viewingDeck.equips || {})); skillQueue = [...(viewingDeck.skills || [])];
-        }
+        if (mode === 'defense_edit') { document.getElementById('formationType').value = viewingDeck.formation || 'basic'; boardSlots = [...(viewingDeck.slots || [])]; currentSelectedPet = viewingDeck.pet; document.getElementById('deckNameInput').value = viewingDeck.name || ''; document.getElementById('deckDescInput').value = viewingDeck.desc || ''; document.getElementById('deckConceptSelect').value = viewingDeck.concept || '상관없음'; heroEquipments = JSON.parse(JSON.stringify(viewingDeck.equips || {})); skillQueue = viewingDeck.skills ? [...viewingDeck.skills] : new Array(3).fill(null); while(skillQueue.length < 3) skillQueue.push(null); } else { skillQueue = new Array(3).fill(null); }
     }
     
-    toggleView('deckBuilderView');
-    switchBuilderTab('config');
+    toggleView('deckBuilderView'); switchBuilderTab('config');
 }
 
 function switchBuilderTab(tab) {
@@ -579,13 +508,19 @@ function switchBuilderTab(tab) {
     } else {
         document.getElementById('b-tab-detail').classList.add('active'); document.getElementById('builderDetailSection').style.display = 'block';
         const tempDeck = { formation: document.getElementById('formationType').value, slots: boardSlots, pet: currentSelectedPet, equips: heroEquipments };
-        renderReadonlyBoard('detailInputHeroBoard', 'detailInputPetSlot', tempDeck, true);
+        renderReadonlyBoard('detailInputHeroBoard', 'detailInputPetSlot', tempDeck, true, builderMode.startsWith('castle'));
+        
         renderAvailableSkills();
     }
 }
 
-function renderReadonlyBoard(boardId, petId, deckData, isEditMode = false) {
+function renderReadonlyBoard(boardId, petId, deckData, isEditMode = false, isCastle = false) {
     if (!deckData) return;
+    
+    const boardEl = document.getElementById(boardId);
+    if (isCastle) boardEl.classList.add('castle-layout');
+    else boardEl.classList.remove('castle-layout');
+    
     const formationType = deckData.formation || 'basic'; 
     const layout = formations[formationType];
     const slotsData = deckData.slots || deckData.heroes || [null, null, null, null, null];
@@ -605,32 +540,85 @@ function renderReadonlyBoard(boardId, petId, deckData, isEditMode = false) {
         }
         html += '</div>';
     });
-    document.getElementById(boardId).innerHTML = html;
+    boardEl.innerHTML = html;
     const p = deckData.pet; document.getElementById(petId).innerHTML = p ? `<img src="./images/pets/${p}.png" onerror="this.src='https://via.placeholder.com/80'">` : '펫 없음';
 }
 
 function renderAvailableSkills() {
     const container = document.getElementById('availableSkills'); container.innerHTML = '';
     const heroes = boardSlots.filter(h => h !== null);
-    skillQueue = skillQueue.filter(s => heroes.some(h => s.startsWith(h)));
+    
+    for(let i=0; i<skillQueue.length; i++) {
+        let s = skillQueue[i];
+        if (s !== null) {
+            let heroName = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : '');
+            if (!heroes.includes(heroName)) skillQueue[i] = null;
+        }
+    }
+    
+    let html = '';
     heroes.forEach(h => {
-        if (h === '세인') { container.innerHTML += `<button class="skill-btn" onclick="addSkill('${h}', 2)">${h} 스킬 2</button>`; } 
-        else { container.innerHTML += `<button class="skill-btn" onclick="addSkill('${h}', 1)">${h} 스킬 1</button><button class="skill-btn" onclick="addSkill('${h}', 2)">${h} 스킬 2</button>`; }
+        html += `<div style="display: flex; flex-direction: column; gap: 8px;">`;
+        html += `<button class="skill-btn" style="background-color: #2980b9;" onclick="addSkill('${h}', 2)">${h} 스킬 2</button>`;
+        
+        if (h === '세인') {
+            html += `<div style="height: 31px;"></div>`; 
+        } else {
+            html += `<button class="skill-btn" style="background-color: #34495e;" onclick="addSkill('${h}', 1)">${h} 스킬 1</button>`;
+        }
+        html += `</div>`;
     });
+    
+    container.innerHTML = html;
     renderSkillQueue();
 }
+
 function addSkill(hero, skillNum) {
-    if (skillQueue.length >= 3) return alert('🚨 스킬 예약은 최대 3개까지만 가능합니다.');
-    const skillName = `${hero} 스킬 ${skillNum}`;
-    if (skillQueue.includes(skillName)) return alert('🚨 이미 예약된 스킬입니다.');
-    skillQueue.push(skillName); renderSkillQueue();
+    const limit = builderMode.startsWith('castle') ? 20 : 3;
+    const firstEmptyIdx = skillQueue.findIndex(s => s === null || s === undefined);
+    if (firstEmptyIdx === -1) return alert(`🚨 스킬 예약은 최대 ${limit}개까지만 가능합니다.`);
+    
+    let roundVal = 1;
+    if (builderMode.startsWith('castle')) {
+        const roundRadio = document.querySelector('input[name="skillRound"]:checked');
+        if (roundRadio) roundVal = parseInt(roundRadio.value);
+    }
+    skillQueue[firstEmptyIdx] = { hero: hero, skillNum: skillNum, round: roundVal }; 
+    renderSkillQueue();
 }
-function removeSkill(index) { if (index < skillQueue.length) { skillQueue.splice(index, 1); renderSkillQueue(); } }
+
+function removeSkill(index) { 
+    if (index < skillQueue.length) { 
+        skillQueue[index] = null; 
+        renderSkillQueue(); 
+    } 
+}
+
 function renderSkillQueue() {
-    const queueDiv = document.getElementById('skillQueue'); let html = '';
-    for (let i = 0; i < 3; i++) {
-        if (i < skillQueue.length) { const text = skillQueue[i].replace(' 스킬 ', '<br>스킬 '); html += `<div class="skill-slot filled" onclick="removeSkill(${i})">${text}</div>`; } 
-        else { html += `<div class="skill-slot" onclick="removeSkill(${i})">${i+1}순위</div>`; }
+    const limit = builderMode.startsWith('castle') ? 20 : 3;
+    const queueDiv = document.getElementById('skillQueue'); 
+    queueDiv.className = builderMode.startsWith('castle') ? 'skill-grid-20' : 'skill-grid-3';
+    let html = '';
+    for (let i = 0; i < limit; i++) {
+        const s = skillQueue[i];
+        if (s !== null && s !== undefined) { 
+            let hero = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : '');
+            let skillNum = s.skillNum || (typeof s === 'string' ? s.split(' 스킬 ')[1] : '');
+            let round = s.round || 1;
+            let roundClass = builderMode.startsWith('castle') ? `round-${round}` : '';
+            let slotClass = builderMode.startsWith('castle') ? 'castle-slot' : '';
+            
+            html += `
+                <div class="skill-slot filled ${roundClass} ${slotClass}" onclick="removeSkill(${i})" title="${hero} 스킬 ${skillNum} (클릭 시 취소)">
+                    <img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;">
+                    <span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span>
+                    <div class="skill-text-label">스킬 ${skillNum}</div>
+                </div>
+            `;
+        } else { 
+            let slotClass = builderMode.startsWith('castle') ? 'castle-slot' : '';
+            html += `<div class="skill-slot empty ${slotClass}" onclick="removeSkill(${i})"><span style="color:#bdc3c7; font-weight:900;">${i+1}</span></div>`; 
+        }
     }
     queueDiv.innerHTML = html;
 }
@@ -639,7 +627,9 @@ function clickSlot(index) { activeSlotType = 'hero'; if (boardSlots[index]) boar
 function clickPetSlot() { activeSlotType = 'pet'; if(currentSelectedPet) currentSelectedPet = null; renderBuilderBoard(); applyFilters(); }
 function selectHero(heroName) {
     if (boardSlots.includes(heroName)) return boardSlots[boardSlots.indexOf(heroName)] = null, renderBuilderBoard();
-    if (boardSlots.filter(h => h).length >= 3) return alert('최대 3명만 배치 가능합니다!');
+    const limit = builderMode.startsWith('castle') ? 5 : 3;
+    if (boardSlots.filter(h => h).length >= limit) return alert(`최대 ${limit}명만 배치 가능합니다!`);
+    
     if (!boardSlots[activeSlotIndex]) boardSlots[activeSlotIndex] = heroName;
     else { const firstEmpty = boardSlots.findIndex(h => !h); if (firstEmpty !== -1) boardSlots[firstEmpty] = heroName, activeSlotIndex = firstEmpty; }
     const nextEmpty = boardSlots.findIndex(h => !h); if (nextEmpty !== -1) activeSlotIndex = nextEmpty;
@@ -648,6 +638,10 @@ function selectHero(heroName) {
 function selectPet(petName) { currentSelectedPet = petName; renderBuilderBoard(); }
 
 function renderBuilderBoard() {
+    const boardEl = document.getElementById('builderHeroBoard');
+    if (builderMode.startsWith('castle')) boardEl.classList.add('castle-layout');
+    else boardEl.classList.remove('castle-layout');
+    
     const layout = formations[document.getElementById('formationType').value];
     let html = '';
     ['후열', '전열'].forEach((lineName, lineIdx) => {
@@ -663,7 +657,7 @@ function renderBuilderBoard() {
         }
         html += '</div>';
     });
-    document.getElementById('builderHeroBoard').innerHTML = html;
+    boardEl.innerHTML = html;
     const pSlot = document.getElementById('builderPetSlot');
     if (currentSelectedPet) { pSlot.className = 'pet-slot filled'; pSlot.innerHTML = `<img src="./images/pets/${currentSelectedPet}.png" onerror="this.src='https://via.placeholder.com/80'">`; } 
     else { pSlot.className = `pet-slot ${activeSlotType === 'pet' ? 'active-slot' : ''}`; pSlot.innerHTML = `<div class="pet-slot-title">펫 슬롯</div>`; }
@@ -710,70 +704,69 @@ function openEquipModal(heroName, isReadOnly) {
     document.getElementById('eqMain').value = eq.mainOpt || ''; 
     document.getElementById('eqAccMain').value = eq.accMain || '없음'; 
     document.getElementById('eqAccSub').value = eq.accSub || '없음';
+    document.getElementById('eqDetail').value = eq.detail || '';
     
     renderExFields(eq.ex || []);
-    
-    if(isReadOnly) {
-        document.getElementById('addExBtn').style.display = 'none';
-    } else {
-        document.getElementById('addExBtn').style.display = currentExCount >= 4 ? 'none' : 'inline-block';
-    }
+    if(isReadOnly) { document.getElementById('addExBtn').style.display = 'none'; } else { document.getElementById('addExBtn').style.display = currentExCount >= 4 ? 'none' : 'inline-block'; }
 
     const inputs = document.querySelectorAll('.equip-form select, .equip-form input'); 
     inputs.forEach(input => input.disabled = isReadOnly);
-    
     document.getElementById('equipModal').style.display = 'flex';
 }
 
 function closeEquipModal() { document.getElementById('equipModal').style.display = 'none'; }
 function saveEquipData() {
     const exValues = []; for(let i=0; i<currentExCount; i++) exValues.push(document.getElementById(`eqEx${i}`).value);
-    heroEquipments[currentEditingHero] = { set: document.getElementById('eqSet').value, mainOpt: document.getElementById('eqMain').value, accMain: document.getElementById('eqAccMain').value, accSub: document.getElementById('eqAccSub').value, ex: exValues };
+    heroEquipments[currentEditingHero] = { 
+        set: document.getElementById('eqSet').value, 
+        mainOpt: document.getElementById('eqMain').value, 
+        accMain: document.getElementById('eqAccMain').value, 
+        accSub: document.getElementById('eqAccSub').value, 
+        detail: document.getElementById('eqDetail').value,
+        ex: exValues 
+    };
     closeEquipModal(); const tempDeck = { formation: document.getElementById('formationType').value, slots: boardSlots, pet: currentSelectedPet, equips: heroEquipments };
-    renderReadonlyBoard('detailInputHeroBoard', 'detailInputPetSlot', tempDeck, true);
+    renderReadonlyBoard('detailInputHeroBoard', 'detailInputPetSlot', tempDeck, true, builderMode.startsWith('castle'));
 }
 
 function saveDeck() {
+    if (builderMode.startsWith('castle')) {
+        const deckDesc = document.getElementById('deckDescInput').value.trim();
+        const speedOrder = document.getElementById('deckSpeedOrderInput').value.trim(); 
+        if(builderMode === 'castle_edit') {
+            const deck = mockCastleDecks.find(d => d.day === currentCastleDay);
+            if(deck) {
+                deck.desc = deckDesc; deck.speedOrder = speedOrder; 
+                deck.formation = document.getElementById('formationType').value; deck.slots = [...boardSlots]; deck.pet = currentSelectedPet; deck.equips = JSON.parse(JSON.stringify(heroEquipments)); deck.skills = [...skillQueue];
+                alert(`✅ ${dayNames[currentCastleDay]}요일 공성전 빌드가 수정되었습니다!`);
+            }
+        } else {
+            mockCastleDecks.push({ id: Date.now(), day: currentCastleDay, desc: deckDesc, speedOrder: speedOrder, formation: document.getElementById('formationType').value, slots: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname });
+            alert(`✅ ${dayNames[currentCastleDay]}요일 공성전 빌드가 등록되었습니다!`);
+        }
+        saveDecksDB(); toggleView('castleView'); renderCastleTab(currentCastleDay); return;
+    }
+
     if (builderMode.startsWith('attack_target')) {
         const targetName = document.getElementById('attackDeckNameInput').value.trim();
-        if(!targetName) return alert('적 방어 덱 이름을 입력해주세요.');
-        if(boardSlots.filter(h => h !== null).length === 0) return alert("🚨 최소 1명 이상의 영웅을 배치해주세요.");
-        
+        if(!targetName) return alert('적 방어 덱 이름을 입력해주세요.'); if(boardSlots.filter(h => h !== null).length === 0) return alert("🚨 최소 1명 이상의 영웅을 배치해주세요.");
         if (builderMode === 'attack_target_edit') {
             const target = mockAttackDecks.find(d => d.id === currentTargetDeckId);
             target.targetName = targetName; target.formation = document.getElementById('formationType').value; target.targetHeroes = [...boardSlots]; target.targetPet = currentSelectedPet;
             alert(`✅ '${targetName}' 덱이 성공적으로 수정되었습니다!`);
-        } else {
-            mockAttackDecks.push({ id: Date.now(), targetName: targetName, formation: document.getElementById('formationType').value, targetHeroes: [...boardSlots], targetPet: currentSelectedPet, counters: [], authorId: currentUser.id, authorNick: currentUser.nickname });
-            alert(`✅ 적 방어 덱 '${targetName}'이(가) 등록되었습니다!`);
-        }
+        } else { mockAttackDecks.push({ id: Date.now(), targetName: targetName, formation: document.getElementById('formationType').value, targetHeroes: [...boardSlots], targetPet: currentSelectedPet, counters: [], authorId: currentUser.id, authorNick: currentUser.nickname }); alert(`✅ 적 방어 덱 '${targetName}'이(가) 등록되었습니다!`); }
         saveDecksDB(); toggleView('mainListView'); return;
     }
 
     if (builderMode.startsWith('attack_counter')) {
-        const target = mockAttackDecks.find(d => d.id === currentTargetDeckId);
-        const deckDesc = document.getElementById('deckDescInput').value.trim();
-        if (builderMode === 'attack_counter_edit') {
-            const counter = target.counters.find(c => c.id === currentCounterDeckId);
-            counter.desc = deckDesc; counter.formation = document.getElementById('formationType').value; counter.heroes = [...boardSlots]; counter.pet = currentSelectedPet; counter.equips = JSON.parse(JSON.stringify(heroEquipments)); counter.skills = [...skillQueue];
-            alert(`✅ 카운터 덱이 성공적으로 수정되었습니다!`);
-        } else {
-            target.counters.push({ id: Date.now(), desc: deckDesc, formation: document.getElementById('formationType').value, heroes: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname, wins: 0, losses: 0, createdAt: Date.now(), votes: {} });
-            alert(`✅ 카운터 덱이 성공적으로 등록되었습니다!`);
-        }
+        const target = mockAttackDecks.find(d => d.id === currentTargetDeckId); const deckDesc = document.getElementById('deckDescInput').value.trim();
+        if (builderMode === 'attack_counter_edit') { const counter = target.counters.find(c => c.id === currentCounterDeckId); counter.desc = deckDesc; counter.formation = document.getElementById('formationType').value; counter.heroes = [...boardSlots]; counter.pet = currentSelectedPet; counter.equips = JSON.parse(JSON.stringify(heroEquipments)); counter.skills = [...skillQueue]; alert(`✅ 카운터 덱이 성공적으로 수정되었습니다!`); } 
+        else { target.counters.push({ id: Date.now(), desc: deckDesc, formation: document.getElementById('formationType').value, heroes: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname, wins: 0, losses: 0, createdAt: Date.now(), votes: {} }); alert(`✅ 카운터 덱이 성공적으로 등록되었습니다!`); }
         saveDecksDB(); toggleView('mainListView'); return;
     }
 
-    const deckName = document.getElementById('deckNameInput').value.trim() || '이름 없는 방어 덱';
-    const deckDesc = document.getElementById('deckDescInput').value.trim();
-    const deckConcept = document.getElementById('deckConceptSelect').value;
-
-    if(builderMode === 'defense_edit' && viewingDeck) {
-        viewingDeck.name = deckName; viewingDeck.desc = deckDesc; viewingDeck.concept = deckConcept; viewingDeck.formation = document.getElementById('formationType').value; viewingDeck.slots = [...boardSlots]; viewingDeck.pet = currentSelectedPet; viewingDeck.equips = JSON.parse(JSON.stringify(heroEquipments)); viewingDeck.skills = [...skillQueue];
-        alert(`✅ '${deckName}' 덱이 성공적으로 수정되었습니다!`);
-    } else {
-        mockDefenseDecks.push({ id: Date.now(), name: deckName, desc: deckDesc, concept: deckConcept, formation: document.getElementById('formationType').value, slots: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname });
-        alert(`✅ '${deckName}' 덱이 성공적으로 추가되었습니다!`);
-    }
+    const deckName = document.getElementById('deckNameInput').value.trim() || '이름 없는 방어 덱'; const deckDesc = document.getElementById('deckDescInput').value.trim(); const deckConcept = document.getElementById('deckConceptSelect').value;
+    if(builderMode === 'defense_edit' && viewingDeck) { viewingDeck.name = deckName; viewingDeck.desc = deckDesc; viewingDeck.concept = deckConcept; viewingDeck.formation = document.getElementById('formationType').value; viewingDeck.slots = [...boardSlots]; viewingDeck.pet = currentSelectedPet; viewingDeck.equips = JSON.parse(JSON.stringify(heroEquipments)); viewingDeck.skills = [...skillQueue]; alert(`✅ '${deckName}' 덱이 성공적으로 수정되었습니다!`); } 
+    else { mockDefenseDecks.push({ id: Date.now(), name: deckName, desc: deckDesc, concept: deckConcept, formation: document.getElementById('formationType').value, slots: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname }); alert(`✅ '${deckName}' 덱이 성공적으로 추가되었습니다!`); }
     saveDecksDB(); toggleView('mainListView');
 }

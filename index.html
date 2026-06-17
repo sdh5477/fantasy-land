@@ -51,6 +51,23 @@
     <table class="admin-table" id="approvedUsersTable"><thead><tr><th>아이디</th><th>닉네임</th><th>권한 상태</th><th>관리 (강퇴)</th></tr></thead><tbody></tbody></table>
 </div>
 
+<div class="container" id="castleView">
+    <button class="btn btn-back" onclick="toggleView('homeView')">🔙 홈으로</button>
+    <h2 style="text-align: center; color: #2c3e50;">🏰 요일별 공성전 빌드</h2>
+    
+    <div class="tabs castle-tabs" id="castleTabsContainer">
+        <button class="tab-btn" id="c-tab-1" onclick="renderCastleTab(1)">월요일 (루디)</button>
+        <button class="tab-btn" id="c-tab-2" onclick="renderCastleTab(2)">화요일 (아일린)</button>
+        <button class="tab-btn" id="c-tab-3" onclick="renderCastleTab(3)">수요일 (레이첼)</button>
+        <button class="tab-btn" id="c-tab-4" onclick="renderCastleTab(4)">목요일 (델론즈)</button>
+        <button class="tab-btn" id="c-tab-5" onclick="renderCastleTab(5)">금요일 (제이브)</button>
+        <button class="tab-btn" id="c-tab-6" onclick="renderCastleTab(6)">토요일 (스파이크)</button>
+        <button class="tab-btn" id="c-tab-0" onclick="renderCastleTab(0)">일요일 (크리스)</button>
+    </div>
+    
+    <div id="castleListContent" style="margin-top: 20px;"></div>
+</div>
+
 <div class="container" id="mainListView">
     <button class="btn btn-back" onclick="toggleView('homeView')">🔙 홈으로</button>
     <div class="tabs">
@@ -73,7 +90,7 @@
 
 <div class="container" id="deckDetailView">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <button class="btn btn-back" style="margin: 0;" onclick="toggleView('mainListView')">🔙 리스트로</button>
+        <button class="btn btn-back" style="margin: 0;" onclick="handleDetailBackBtn()">🔙 리스트로</button>
         <div>
             <button class="btn" id="deleteDeckBtn" style="background-color: #e74c3c; color: white; margin-right: 5px; display: none;" onclick="deleteCurrentDeck()">🗑️ 삭제</button>
             <button class="btn" id="editDeckBtn" style="background-color: #f39c12; color: white; display: none;" onclick="editCurrentDeck()">✏️ 수정</button>
@@ -84,17 +101,17 @@
     <div id="detailDeckDesc" style="text-align: center; color: #555; font-size: 14px; margin-bottom: 20px; font-weight: bold;">💡 설명이 없습니다.</div>
     <div style="text-align: center; font-size: 12px; color: #95a5a6; margin-bottom: 15px;" id="detailDeckAuthor">작성자: </div>
     
-    <div class="board-container"><div class="hero-board" id="detailHeroBoard"></div><div class="pet-slot filled" id="detailPetSlot"></div></div>
-    
-    <div style="text-align: center; margin-top: 20px; background: #fff; padding: 15px; border-radius: 10px; border: 1px solid #ddd;">
-        <h4 style="color: #8e44ad; margin-top: 0; margin-bottom: 15px;">⚔️ 스킬 예약 순서</h4>
-        <div id="detailSkillQueue" style="display: flex; justify-content: center; gap: 10px;"></div>
+    <div style="text-align: center; margin-bottom: 20px; background: #fff; padding: 15px; padding-bottom: 30px; border-radius: 10px; border: 1px solid #ddd;">
+        <h4 style="color: #8e44ad; margin-top: 0; margin-bottom: 15px;">⚔️ 스킬 순서</h4>
+        <div id="detailSkillQueue"></div>
     </div>
+
+    <div class="board-container"><div class="hero-board" id="detailHeroBoard"></div><div class="pet-slot filled" id="detailPetSlot"></div></div>
     <div class="memo" style="margin-top: 20px;">💡 <b>장비 정보 조회:</b> 위 보드에서 영웅을 클릭하면 해당 영웅의 장비 및 세팅 정보를 볼 수 있습니다.</div>
 </div>
 
 <div class="container" id="deckBuilderView">
-    <button class="btn btn-back" onclick="toggleView('mainListView')">🔙 취소</button>
+    <button class="btn btn-back" onclick="handleBuilderBackBtn()">🔙 취소</button>
     <h2 id="builderTitle" style="text-align: center; color: #2c3e50;">🛠️ 영웅 및 펫 선택 (최대 3명)</h2>
     
     <div class="builder-tabs">
@@ -141,18 +158,33 @@
             </div>
         </div>
 
+        <div id="speedOrderContainer" class="formation-control" style="margin-top: 15px; background: #fff3e0; padding: 15px; border-radius: 8px; border: 1px solid #ffcc80; display: none; box-sizing: border-box;">
+            <label style="display: block; margin-bottom: 8px; color: #e67e22;"><strong>⚡ 추천 속공 순서: </strong></label>
+            <input type="text" id="deckSpeedOrderInput" placeholder="예: 1.미호  2.아일린  3.리나" style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #bdc3c7; outline: none; font-size: 14px; font-weight: bold; color: #d35400; box-sizing: border-box;">
+        </div>
+
         <div id="conceptContainer" class="formation-control" style="margin-top: 15px;">
             <label><strong>덱 컨셉 설정: </strong></label>
             <select id="deckConceptSelect" style="padding: 10px; font-weight: bold; color: #c0392b; border: 2px solid #e74c3c; border-radius: 5px; outline: none;">
                 <option value="상관없음">선택 안 함 (상관없음)</option><option value="속공">⚡ 속공 위주</option><option value="속내실">⚖️ 속내실 밸런스</option><option value="내실">🛡️ 내실(버티기) 위주</option>
             </select>
         </div>
-        <div class="formation-control" style="margin-top: 20px; background: #fff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <label style="color: #8e44ad;"><strong>⚔️ 스킬 예약 설정 (최대 3개): </strong></label>
-            <div id="skillQueue" style="display: flex; justify-content: center; gap: 10px; margin-top: 10px;"></div>
-            <p style="font-size: 11px; color: #7f8c8d; margin-top: 10px;">아래 스킬을 클릭하여 예약하세요. (순위 클릭 시 취소)</p>
+        
+        <div class="formation-control" style="margin-top: 20px; background: #fff; padding: 15px; padding-bottom: 30px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+            <label style="color: #8e44ad;" id="skillQueueLabel"><strong>⚔️ 스킬 순서: </strong></label>
+            
+            <div id="roundSelectContainer" style="text-align:center; margin-bottom: 15px; display:none;">
+                <span style="font-size: 13px; font-weight: bold; margin-right: 10px; color:#2c3e50;">🎨 라운드 선택:</span>
+                <label style="margin-right:10px; cursor:pointer;"><input type="radio" name="skillRound" value="1" checked> <span style="background:#ffe5e5; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold; color:#d63031;">1라운드</span></label>
+                <label style="margin-right:10px; cursor:pointer;"><input type="radio" name="skillRound" value="2"> <span style="background:#fff9c4; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold; color:#b45309;">2라운드</span></label>
+                <label style="cursor:pointer;"><input type="radio" name="skillRound" value="3"> <span style="background:#dbeafe; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold; color:#1d4ed8;">3라운드</span></label>
+            </div>
+
+            <div id="skillQueue"></div>
+            <p style="font-size: 11px; color: #7f8c8d; margin-top: 15px; text-align:center;">아래 스킬을 클릭하여 예약하세요. (위 순서 슬롯 클릭 시 취소되며, 빈자리가 유지됩니다.)</p>
             <div id="availableSkills" style="display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 10px;"></div>
         </div>
+
         <p style="text-align: center; color: #e67e22; font-weight: bold; margin-top: 20px;">※ 영웅을 클릭하여 장비 세팅을 입력하세요.</p>
         <div class="board-container"><div class="hero-board" id="detailInputHeroBoard"></div><div class="pet-slot" id="detailInputPetSlot"></div></div>
         <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 2px dashed #bdc3c7;"><button class="btn btn-primary" style="font-size: 18px; padding: 15px 40px; background-color: #27ae60;" onclick="saveDeck()">✅ 덱 완성 및 저장하기</button></div>
@@ -170,13 +202,16 @@
             </div>
             <label>💍 장신구</label>
             <div class="split-input">
-                <select id="eqAccMain"><option value="없음">주</option><option value="부활">부활</option><option value="불사">불사</option><option value="권능">권능</option></select>
-                <select id="eqAccSub"><option value="없음">부</option><option value="부활">부활</option><option value="불사">불사</option><option value="권능">권능</option></select>
+                <select id="eqAccMain"><option value="없음">주</option><option value="부활">부활</option><option value="불사">불사</option><option value="권능">권능</option><option value="토벌">토벌</option><option value="공성">공성</option><option value="상태이상(출혈·화상·중독)">상태이상(출혈·화상·중독)</option><option value="행운(치확)">행운(치확)</option><option value="집중(약확)">집중(약확)</option></select>
+                <select id="eqAccSub"><option value="없음">부</option><option value="부활">부활</option><option value="불사">불사</option><option value="권능">권능</option><option value="토벌">토벌</option><option value="공성">공성</option><option value="상태이상(출혈·화상·중독)">상태이상(출혈·화상·중독)</option><option value="행운(치확)">행운(치확)</option><option value="집중(약확)">집중(약확)</option></select>
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
                 <label style="margin: 0;">⚔️ 전용장비</label><button id="addExBtn" class="btn" style="padding: 2px 8px; font-size: 12px; background: #3498db; color: white;" onclick="addExField()">+ 추가하기</button>
             </div>
             <div id="exContainer" style="display: flex; flex-direction: column; gap: 5px; margin-top: 5px;"></div>
+            
+            <label>📝 상세 스탯 요약</label>
+            <input type="text" id="eqDetail" placeholder="">
         </div>
         <div style="text-align: right; margin-top: 20px;">
             <button class="btn" onclick="closeEquipModal()" style="background: #95a5a6; color: white; margin-right: 10px;">닫기</button><button class="btn btn-primary" onclick="saveEquipData()" id="saveEquipBtn">저장</button>
@@ -190,8 +225,8 @@
         <div class="form-group" style="margin-top: 15px;">
             <label>인게임 닉네임 변경</label>
             <div style="display: flex; gap: 10px;">
-                <input type="text" id="newNicknameInput" placeholder="새로운 닉네임" onkeydown="if(event.key === 'Enter') changeNickname()">
-                <button class="btn btn-primary" onclick="changeNickname()">변경</button>
+                <input type="text" id="newNicknameInput" placeholder="새로운 닉네임" onkeydown="if(event.key === 'Enter') changeNickname()" style="flex: 1;">
+                <button class="btn btn-primary" onclick="changeNickname()" style="white-space: nowrap; flex-shrink: 0;">변경</button>
             </div>
         </div>
         <div style="margin-top: 30px; border-top: 1px dashed #e74c3c; padding-top: 15px; text-align: center;">
