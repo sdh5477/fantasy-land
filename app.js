@@ -12,7 +12,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// 전역 데이터 변수 (이제 임시저장소가 아닌 서버에서 불러옵니다)
+// 전역 데이터 변수
 let usersDB = [];
 let mockDefenseDecks = [];
 let mockAttackDecks = [];
@@ -33,25 +33,36 @@ function saveDecksDB() {
 
 // ⏳ 서버에서 데이터를 불러오는 초기화 함수
 async function initDB() {
-    // 1. 유저 정보 불러오기
-    const usersSnap = await db.collection('users').get();
-    usersSnap.forEach(doc => usersDB.push(doc.data()));
+    try {
+        const usersSnap = await db.collection('users').get();
+        usersSnap.forEach(doc => usersDB.push(doc.data()));
 
-    // DB가 완전히 비어있다면 최고관리자 계정 1개 생성 후 서버에 저장
-    if (usersDB.length === 0) {
-        const adminData = { id: 'adminadmin', pw: '54775477a.', nickname: '최고관리자', role: 'admin', status: 'approved' };
-        await db.collection('users').doc(adminData.id).set(adminData);
-        usersDB.push(adminData);
+        // 💡 최고관리자 보장 로직: 유저 수와 상관없이 DB에 'adminadmin'이 없다면 무조건 생성!
+        if (!usersDB.find(u => u.id === 'adminadmin')) {
+            const adminData = { id: 'adminadmin', pw: '54775477a.', nickname: '최고관리자', role: 'admin', status: 'approved' };
+            await db.collection('users').doc(adminData.id).set(adminData);
+            usersDB.push(adminData);
+        }
+
+        const defSnap = await db.collection('defenseDecks').get();
+        defSnap.forEach(doc => mockDefenseDecks.push(doc.data()));
+
+        const attSnap = await db.collection('attackDecks').get();
+        attSnap.forEach(doc => mockAttackDecks.push(doc.data()));
+
+    } catch (error) {
+        console.error("Firebase 연결 오류:", error);
+    } finally {
+        updateHeader();
+        // ✅ 이전 화면 기억 기능을 끄고, 처음 접속 시 무조건 메인 화면(homeView)을 띄우도록 수정
+        toggleView('homeView');
     }
-
-    // 2. 방어 추천 덱 불러오기
-    const defSnap = await db.collection('defenseDecks').get();
-    defSnap.forEach(doc => mockDefenseDecks.push(doc.data()));
-
-    // 3. 공격 추천 덱(상대 방어덱+카운터) 불러오기
-    const attSnap = await db.collection('attackDecks').get();
-    attSnap.forEach(doc => mockAttackDecks.push(doc.data()));
 }
+
+// 웹페이지가 열릴 때 DB를 불러옵니다
+window.onload = function() { 
+    initDB(); 
+};
 
 let boardSlots = [null, null, null, null, null];
 let activeSlotIndex = 0; 
@@ -195,21 +206,12 @@ function toggleView(viewId) {
     views.forEach(id => document.getElementById(id).style.display = 'none');
     
     document.getElementById(viewId).style.display = 'block';
-    localStorage.setItem('currentView', viewId);
     updateHeader();
     
     if(viewId !== 'deckBuilderView') resetBuilderState();
     if (viewId === 'mainListView') switchMainTab(currentMainTab);
     if (viewId === 'adminView') renderAdminView(); 
 }
-
-// ⏳ 웹페이지가 열릴 때 DB를 먼저 싹 불러온 후 화면을 띄웁니다
-window.onload = async function() { 
-    await initDB(); 
-    updateHeader();
-    const savedView = localStorage.getItem('currentView') || 'homeView';
-    toggleView(savedView);
-};
 
 function setAttackSortMode(mode) { attackSortMode = mode; switchMainTab('attack'); }
 
