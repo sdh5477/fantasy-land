@@ -45,10 +45,22 @@
 <div class="container" id="adminView">
     <button class="btn btn-back" onclick="toggleView('homeView')">🔙 메인으로 돌아가기</button>
     <h2 style="text-align: center; color: #8e44ad;">👑 길드원 관리 시스템</h2>
+    
     <h3 style="color: #e67e22; border-bottom: 2px solid #e67e22; padding-bottom: 5px;">🔔 가입 승인 대기 명단</h3>
     <table class="admin-table" id="pendingUsersTable"><thead><tr><th>아이디</th><th>닉네임</th><th>상태</th><th>관리</th></tr></thead><tbody></tbody></table>
-    <h3 style="color: #2980b9; border-bottom: 2px solid #2980b9; padding-bottom: 5px; margin-top: 40px;">🛡️ 현재 길드원 명단</h3>
-    <table class="admin-table" id="approvedUsersTable"><thead><tr><th>아이디</th><th>닉네임</th><th>권한 상태</th><th>관리 (강퇴)</th></tr></thead><tbody></tbody></table>
+    
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 40px; border-bottom: 2px solid #2980b9; padding-bottom: 5px;">
+        <h3 style="color: #2980b9; margin: 0;">🛡️ 현재 길드원 명단</h3>
+        <select id="userSortSelect" onchange="renderAdminView()" style="padding: 5px; border-radius: 5px; border: 1px solid #bdc3c7; outline: none; font-size: 13px;">
+            <option value="join_asc">가입순 ▲</option>
+            <option value="join_desc">가입순 ▼</option>
+            <option value="name_asc">닉네임 가나다순 ▲</option>
+            <option value="name_desc">닉네임 가나다순 ▼</option>
+            <option value="role_asc">권한순 (높은순) ▲</option>
+            <option value="role_desc">권한순 (낮은순) ▼</option>
+        </select>
+    </div>
+    <table class="admin-table" id="approvedUsersTable"><thead><tr><th>아이디</th><th>닉네임</th><th>권한 상태</th><th>관리</th></tr></thead><tbody></tbody></table>
 </div>
 
 <div class="container" id="castleView">

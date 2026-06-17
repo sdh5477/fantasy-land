@@ -163,19 +163,56 @@ function renderAdminView() {
     if(!currentUser || !['admin', 'master'].includes(currentUser.role)) { alert('접근 권한이 없습니다.'); toggleView('homeView'); return; }
     const pendingTbody = document.querySelector('#pendingUsersTable tbody'); const approvedTbody = document.querySelector('#approvedUsersTable tbody');
     pendingTbody.innerHTML = ''; approvedTbody.innerHTML = '';
+    
+    const roleWeight = { 'admin': 4, 'master': 3, 'elite': 2, 'user': 1 };
+    
     usersDB.forEach(u => {
         if(u.id === 'adminadmin') return; 
         if(u.status === 'pending') {
             pendingTbody.innerHTML += `<tr><td>${u.id}</td><td>${u.nickname}</td><td><span class="badge-status" style="background:#f1c40f; color:#333;">대기중</span></td><td><button class="btn-sm" style="background:#27ae60;" onclick="adminAction('${u.id}', 'approve')">승인</button> <button class="btn-sm" style="background:#c0392b;" onclick="adminAction('${u.id}', 'reject')">거절</button></td></tr>`;
-        } else if(u.status === 'approved') {
-            let roleDisplay = '';
-            if (currentUser.role === 'admin') { roleDisplay = `<select onchange="adminAction('${u.id}', 'changeRole', this.value)" style="padding: 3px; font-size: 12px; outline: none; border: 1px solid #bdc3c7;"><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>관리자</option><option value="master" ${u.role === 'master' ? 'selected' : ''}>길드장</option><option value="elite" ${u.role === 'elite' ? 'selected' : ''}>정예 길드원</option><option value="user" ${u.role === 'user' ? 'selected' : ''}>길드원</option></select>`; } 
-            else { roleDisplay = getRoleName(u.role); }
-            let kickBtn = '';
-            if (currentUser.role === 'admin' || (currentUser.role === 'master' && !['admin', 'master'].includes(u.role))) { kickBtn = `<button class="btn-sm" style="background:#c0392b;" onclick="adminAction('${u.id}', 'kick')">강퇴(탈퇴)</button>`; } else { kickBtn = `<span style="color:#7f8c8d; font-size:12px;">권한 없음</span>`; }
-            approvedTbody.innerHTML += `<tr><td>${u.id}</td><td>${u.nickname}</td><td>${roleDisplay}</td><td>${kickBtn}</td></tr>`;
         }
     });
+
+    let approvedUsers = usersDB.filter(u => u.id !== 'adminadmin' && u.status === 'approved');
+    const sortSelect = document.getElementById('userSortSelect');
+    const sortType = sortSelect ? sortSelect.value : 'join_asc';
+
+    // 선택된 기준에 따른 정렬 로직
+    approvedUsers.sort((a, b) => {
+        if (sortType.startsWith('name')) {
+            return sortType.endsWith('asc') ? a.nickname.localeCompare(b.nickname) : b.nickname.localeCompare(a.nickname);
+        } else if (sortType.startsWith('role')) {
+            return sortType.endsWith('asc') ? roleWeight[b.role] - roleWeight[a.role] : roleWeight[a.role] - roleWeight[b.role];
+        } else {
+            // 가입순 (usersDB 배열의 인덱스 기준)
+            const idxA = usersDB.indexOf(a); const idxB = usersDB.indexOf(b);
+            return sortType.endsWith('asc') ? idxA - idxB : idxB - idxA;
+        }
+    });
+
+    approvedUsers.forEach(u => {
+        let roleDisplay = '';
+        if (currentUser.role === 'admin') { 
+            roleDisplay = `<select onchange="adminAction('${u.id}', 'changeRole', this.value)" style="padding: 3px; font-size: 12px; outline: none; border: 1px solid #bdc3c7;"><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>관리자</option><option value="master" ${u.role === 'master' ? 'selected' : ''}>길드장</option><option value="elite" ${u.role === 'elite' ? 'selected' : ''}>정예 길드원</option><option value="user" ${u.role === 'user' ? 'selected' : ''}>길드원</option></select>`; 
+        } else { 
+            roleDisplay = getRoleName(u.role); 
+        }
+        
+        let manageBtns = '';
+        const canManage = roleWeight[currentUser.role] > roleWeight[u.role];
+        
+        // 본인보다 권한이 낮은 길드원에게만 닉네임 변경 및 강퇴 버튼 노출
+        if (canManage) { 
+            manageBtns = `
+                <button class="btn-sm" style="background:#3498db; margin-bottom: 2px;" onclick="adminAction('${u.id}', 'changeNick')">닉네임 변경</button>
+                <button class="btn-sm" style="background:#c0392b;" onclick="adminAction('${u.id}', 'kick')">강퇴</button>
+            `; 
+        } else { 
+            manageBtns = `<span style="color:#7f8c8d; font-size:12px;">권한 없음</span>`; 
+        }
+        approvedTbody.innerHTML += `<tr><td>${u.id}</td><td>${u.nickname}</td><td>${roleDisplay}</td><td>${manageBtns}</td></tr>`;
+    });
+
     if(pendingTbody.innerHTML === '') pendingTbody.innerHTML = '<tr><td colspan="4">대기 중인 인원이 없습니다.</td></tr>';
     if(approvedTbody.innerHTML === '') approvedTbody.innerHTML = '<tr><td colspan="4">관리 가능한 길드원이 없습니다.</td></tr>';
 }
@@ -186,6 +223,22 @@ function adminAction(userId, action, extraValue) {
     else if(action === 'reject') { if(confirm(`${usersDB[userIndex].nickname}님의 신청을 거절(삭제)하시겠습니까?`)) { db.collection('users').doc(userId).delete(); usersDB.splice(userIndex, 1); } }
     else if(action === 'kick') { if(confirm(`정말 ${usersDB[userIndex].nickname}님을 강퇴시키겠습니까?\n강퇴 시 해당 아이디로 접속할 수 없습니다.`)) { usersDB[userIndex].status = 'kicked'; alert('강퇴 처리되었습니다.'); saveUsersDB(); } }
     else if(action === 'changeRole') { usersDB[userIndex].role = extraValue; alert(`${usersDB[userIndex].nickname}님의 권한이 [${getRoleName(extraValue)}]로 변경되었습니다.`); saveUsersDB(); }
+    else if(action === 'changeNick') {
+        const newNick = prompt(`'${usersDB[userIndex].nickname}'님의 강제 변경할 새로운 닉네임을 입력하세요:`);
+        if (newNick && newNick.trim() !== '' && newNick !== usersDB[userIndex].nickname) {
+            const finalNick = newNick.trim();
+            usersDB[userIndex].nickname = finalNick;
+            
+            // 모든 덱 데이터베이스의 작성자 닉네임도 일괄 업데이트
+            mockDefenseDecks.forEach(d => { if(d.authorId === userId) d.authorNick = finalNick; });
+            mockAttackDecks.forEach(d => { if(d.authorId === userId) d.authorNick = finalNick; d.counters.forEach(c => { if(c.authorId === userId) c.authorNick = finalNick; }); });
+            mockCastleDecks.forEach(d => { if(d.authorId === userId) d.authorNick = finalNick; });
+            mockRaidDecks.forEach(d => { if(d.authorId === userId) d.authorNick = finalNick; });
+            
+            alert(`닉네임이 '${finalNick}'(으)로 강제 변경되었습니다.`);
+            saveUsersDB(); saveDecksDB();
+        }
+    }
     renderAdminView();
 }
 
