@@ -8,7 +8,7 @@ const firebaseConfig = {
     appId: "1:898927815648:web:b421a2dc4cf00425625985"
 };
 
-// Firebase 및 Firestore 데이터베이스 초기화 (호환 모드)
+// Firebase 초기화
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
@@ -16,53 +16,40 @@ const db = firebase.firestore();
 let usersDB = [];
 let mockDefenseDecks = [];
 let mockAttackDecks = [];
-let mockCastleDecks = []; // 🏰 공성전 데이터 저장소
+let mockCastleDecks = [];
+let mockRaidDecks = [];
 
 const dayNames = { 1: '월', 2: '화', 3: '수', 4: '목', 5: '금', 6: '토', 0: '일' };
 
 let currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
 function saveCurrentUser() { localStorage.setItem('currentUser', JSON.stringify(currentUser)); }
 
-// 🔄 데이터베이스 동기화 함수들
 function saveUsersDB() { usersDB.forEach(u => db.collection('users').doc(u.id).set(u)); }
-
 function saveDecksDB() { 
     mockDefenseDecks.forEach(d => db.collection('defenseDecks').doc(String(d.id)).set(d)); 
     mockAttackDecks.forEach(d => db.collection('attackDecks').doc(String(d.id)).set(d));
     mockCastleDecks.forEach(d => db.collection('castleDecks').doc(String(d.id)).set(d)); 
+    mockRaidDecks.forEach(d => db.collection('raidDecks').doc(String(d.id)).set(d)); 
 }
 
-// ⏳ 서버에서 데이터를 불러오는 초기화 함수
 async function initDB() {
     try {
         const usersSnap = await db.collection('users').get();
         usersSnap.forEach(doc => usersDB.push(doc.data()));
-
         if (!usersDB.find(u => u.id === 'adminadmin')) {
             const adminData = { id: 'adminadmin', pw: '54775477a.', nickname: '최고관리자', role: 'admin', status: 'approved' };
             await db.collection('users').doc(adminData.id).set(adminData);
             usersDB.push(adminData);
         }
-
-        const defSnap = await db.collection('defenseDecks').get();
-        defSnap.forEach(doc => mockDefenseDecks.push(doc.data()));
-
-        const attSnap = await db.collection('attackDecks').get();
-        attSnap.forEach(doc => mockAttackDecks.push(doc.data()));
-        
-        const castleSnap = await db.collection('castleDecks').get();
-        castleSnap.forEach(doc => mockCastleDecks.push(doc.data()));
-
-    } catch (error) {
-        console.error("Firebase 연결 오류:", error);
-    } finally {
-        updateHeader();
-        toggleView('homeView');
-    }
+        const defSnap = await db.collection('defenseDecks').get(); defSnap.forEach(doc => mockDefenseDecks.push(doc.data()));
+        const attSnap = await db.collection('attackDecks').get(); attSnap.forEach(doc => mockAttackDecks.push(doc.data()));
+        const castleSnap = await db.collection('castleDecks').get(); castleSnap.forEach(doc => mockCastleDecks.push(doc.data()));
+        const raidSnap = await db.collection('raidDecks').get(); raidSnap.forEach(doc => mockRaidDecks.push(doc.data()));
+    } catch (error) { console.error("Firebase 연결 오류:", error); } finally { updateHeader(); toggleView('homeView'); }
 }
-
 window.onload = function() { initDB(); };
 
+// 빌더 변수
 let boardSlots = [null, null, null, null, null];
 let activeSlotIndex = 0; 
 let currentSelectedPet = null;
@@ -71,6 +58,12 @@ let heroEquipments = {};
 let skillQueue = []; 
 let currentExCount = 1;
 
+let currentRaidRound = 1; 
+let raidDataBuffer = {
+    1: { slots: [null,null,null,null,null], pet: null, equips: {}, formation: 'basic', skills: [] },
+    2: { slots: [null,null,null,null,null], pet: null, equips: {}, formation: 'basic', skills: [] }
+};
+
 let viewingDeck = null; 
 let viewingDeckType = 'defense'; 
 let currentMainTab = 'defense'; 
@@ -78,6 +71,7 @@ let builderMode = 'defense_new';
 let currentTargetDeckId = null;
 let currentCounterDeckId = null;
 let currentCastleDay = 1; 
+let currentRaidBoss = '태오';
 let attackSortMode = 'winrate'; 
 let openAccordionIds = [];
 
@@ -86,8 +80,10 @@ const exEquipOptions = ["없음", "모든 공격력(%)", "방어력(%)", "생명
 
 function resetBuilderState() {
     boardSlots = [null, null, null, null, null]; activeSlotIndex = 0; currentSelectedPet = null; activeSlotType = 'hero'; heroEquipments = {}; skillQueue = []; currentExCount = 1; viewingDeck = null; currentTargetDeckId = null; currentCounterDeckId = null; viewingDeckType = 'defense';
-    document.getElementById('deckConceptSelect').value = '상관없음'; document.getElementById('deckNameInput').value = ''; document.getElementById('deckDescInput').value = ''; document.getElementById('attackDeckNameInput').value = ''; document.getElementById('formationType').value = 'basic';
-    document.getElementById('deckSpeedOrderInput').value = ''; // 💡 속공 순서 입력칸 초기화
+    raidDataBuffer = { 1: { slots: [null,null,null,null,null], pet: null, equips: {}, formation: 'basic', skills: [] }, 2: { slots: [null,null,null,null,null], pet: null, equips: {}, formation: 'basic', skills: [] } }; currentRaidRound = 1;
+    document.getElementById('deckConceptSelect').value = '상관없음'; document.getElementById('deckNameInput').value = ''; document.getElementById('deckDescInput').value = ''; document.getElementById('attackDeckNameInput').value = ''; document.getElementById('formationType').value = 'basic'; document.getElementById('deckSpeedOrderInput').value = '';
+    const rSpeed1 = document.getElementById('raidSpeed1'); if(rSpeed1) rSpeed1.value = '';
+    const rSpeed2 = document.getElementById('raidSpeed2'); if(rSpeed2) rSpeed2.value = '';
 }
 
 function getMiniHeroHTML(name, type="hero") {
@@ -113,7 +109,6 @@ function attemptLogin() {
     if (!user) return alert('아이디 또는 비밀번호가 틀렸습니다.');
     if (user.status === 'pending') return alert('가입 대기 중입니다. 관리자의 승인을 기다려주세요.');
     if (user.status === 'kicked') return alert('길드에서 강퇴(탈퇴)되어 접속할 수 없습니다.');
-
     currentUser = user; saveCurrentUser(); alert(`환영합니다, ${user.nickname}님!`);
     document.getElementById('loginId').value = ''; document.getElementById('loginPw').value = ''; toggleView('homeView');
 }
@@ -138,10 +133,12 @@ function changeNickname() {
     mockDefenseDecks.forEach(d => { if(d.authorId === currentUser.id) d.authorNick = newNick; });
     mockAttackDecks.forEach(d => { if(d.authorId === currentUser.id) d.authorNick = newNick; d.counters.forEach(c => { if(c.authorId === currentUser.id) c.authorNick = newNick; }); });
     mockCastleDecks.forEach(d => { if(d.authorId === currentUser.id) d.authorNick = newNick; });
+    mockRaidDecks.forEach(d => { if(d.authorId === currentUser.id) d.authorNick = newNick; });
     currentUser.nickname = newNick; saveUsersDB(); saveCurrentUser(); saveDecksDB();
     alert(`닉네임이 '${newNick}'(으)로 변경되었습니다!`); closeProfileModal(); updateHeader();
     if(document.getElementById('mainListView').style.display === 'block') switchMainTab(currentMainTab);
     if(document.getElementById('castleView').style.display === 'block') renderCastleTab(currentCastleDay);
+    if(document.getElementById('raidView').style.display === 'block') renderRaidTab(currentRaidBoss);
     if(document.getElementById('deckDetailView').style.display === 'block') document.getElementById('detailDeckAuthor').innerText = `작성자: ${newNick}`;
 }
 
@@ -158,6 +155,7 @@ function enterMenu(menu) {
     if (!currentUser) { alert('🚨 길드원 전용 메뉴입니다. 로그인을 먼저 해주세요!'); toggleView('loginView'); return; }
     if (menu === 'guildWar') toggleView('mainListView'); 
     else if (menu === 'castle') { toggleView('castleView'); renderCastleTab(new Date().getDay()); }
+    else if (menu === 'raid') { toggleView('raidView'); renderRaidTab('태오'); }
     else alert('해당 메뉴는 준비 중입니다!');
 }
 
@@ -192,38 +190,34 @@ function adminAction(userId, action, extraValue) {
 }
 
 function toggleView(viewId) {
-    const views = ['homeView', 'mainListView', 'deckBuilderView', 'deckDetailView', 'loginView', 'signupView', 'adminView', 'castleView'];
+    const views = ['homeView', 'mainListView', 'deckBuilderView', 'deckDetailView', 'loginView', 'signupView', 'adminView', 'castleView', 'raidView'];
     views.forEach(id => document.getElementById(id).style.display = 'none');
     document.getElementById(viewId).style.display = 'block';
     updateHeader();
-    if(viewId !== 'deckBuilderView') resetBuilderState();
+    
+    if(viewId !== 'deckBuilderView' && viewId !== 'deckDetailView') {
+        resetBuilderState();
+    }
+    
     if (viewId === 'mainListView') switchMainTab(currentMainTab);
     if (viewId === 'adminView') renderAdminView(); 
 }
 
-/* 🏰 공성전 탭 렌더링 함수 */
+/* 🏰 공성전 렌더링 */
 function renderCastleTab(dayIdx) {
     currentCastleDay = dayIdx;
-    const tabs = document.querySelectorAll('.castle-tabs .tab-btn');
+    const tabs = document.querySelectorAll('#castleTabsContainer .tab-btn');
     tabs.forEach(tab => tab.classList.remove('active'));
     document.getElementById(`c-tab-${dayIdx}`).classList.add('active');
 
     const contentDiv = document.getElementById('castleListContent');
     contentDiv.innerHTML = '';
-
     const deck = mockCastleDecks.find(d => d.day === dayIdx);
     const isAdminMaster = currentUser && ['admin', 'master'].includes(currentUser.role);
     
     if (deck) {
-        let editDeleteBtns = isAdminMaster ? `
-            <div style="text-align: right; margin-bottom: 10px;">
-                <button class="btn" style="background-color: #f39c12; color: white; margin-right: 5px;" onclick="openDeckBuilder('castle_edit', null, null, ${dayIdx})">✏️ 수정</button>
-                <button class="btn" style="background-color: #e74c3c; color: white;" onclick="deleteCastleDeck(${dayIdx})">🗑️ 삭제</button>
-            </div>
-        ` : '';
-
+        let editDeleteBtns = isAdminMaster ? `<div style="text-align: right; margin-bottom: 10px;"><button class="btn" style="background-color: #f39c12; color: white; margin-right: 5px;" onclick="openDeckBuilder('castle_edit', null, null, ${dayIdx})">✏️ 수정</button><button class="btn" style="background-color: #e74c3c; color: white;" onclick="deleteCastleDeck(${dayIdx})">🗑️ 삭제</button></div>` : '';
         let boardHtml = `<div class="board-container"><div class="hero-board" id="castleHeroBoard"></div><div class="pet-slot filled" id="castlePetSlot"></div></div>`;
-        
         let skillsHtml = '<div class="skill-grid-20">';
         if (deck.skills && deck.skills.some(s => s !== null)) {
             deck.skills.forEach((s, idx) => {
@@ -231,23 +225,11 @@ function renderCastleTab(dayIdx) {
                     let hero = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : '');
                     let skillNum = s.skillNum || (typeof s === 'string' ? s.split(' 스킬 ')[1] : '');
                     let round = s.round || 1;
-                    skillsHtml += `
-                        <div class="skill-slot filled round-${round} castle-slot" style="cursor:default;" title="${hero} 스킬 ${skillNum}">
-                            <img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;">
-                            <span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span>
-                            <div class="skill-text-label">스킬 ${skillNum}</div>
-                        </div>
-                    `;
-                } else {
-                    skillsHtml += `<div class="skill-slot empty castle-slot" style="cursor:default;"></div>`;
-                }
+                    skillsHtml += `<div class="skill-slot filled round-${round} castle-slot" style="cursor:default;" title="${hero} 스킬 ${skillNum}"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span><div class="skill-text-label">스킬 ${skillNum}</div></div>`;
+                } else { skillsHtml += `<div class="skill-slot empty castle-slot" style="cursor:default;"></div>`; }
             });
-        } else {
-            skillsHtml += '<div style="grid-column: span 10; color:#7f8c8d; font-size:14px; padding: 20px; text-align:center;">설정된 스킬 순서가 없습니다.</div>';
-        }
+        } else { skillsHtml += '<div style="grid-column: span 10; color:#7f8c8d; font-size:14px; padding: 20px; text-align:center;">설정된 스킬 순서가 없습니다.</div>'; }
         skillsHtml += '</div>';
-
-        // 💡 속공 순서 표시용 문구를 파스텔 톤 주황색(가독성 고려)으로 변경
         let speedOrderHtml = deck.speedOrder ? `<div style="text-align: center; color: #e67e22; font-size: 14px; margin-bottom: 20px; font-weight: bold;">⚡ 추천 속공 순서: <span style="color:#d35400;">${deck.speedOrder}</span></div>` : '';
 
         contentDiv.innerHTML = `
@@ -257,37 +239,57 @@ function renderCastleTab(dayIdx) {
                 <div style="text-align: center; color: #555; font-size: 14px; margin-bottom: 10px; font-weight: bold;">💡 ${deck.desc || '설명이 없습니다.'}</div>
                 ${speedOrderHtml}
                 <div style="text-align: right; font-size: 12px; color: #95a5a6; margin-bottom: 10px;">작성자: ${deck.authorNick}</div>
-                
                 <div style="text-align: center; margin-bottom: 20px; background: #fafafa; padding: 15px; padding-bottom: 30px; border-radius: 10px; border: 1px solid #eee;">
-                    <h4 style="color: #8e44ad; margin-top: 0; margin-bottom: 15px;">⚔️ 스킬 순서</h4>
-                    ${skillsHtml}
+                    <h4 style="color: #8e44ad; margin-top: 0; margin-bottom: 15px;">⚔️ 스킬 순서</h4>${skillsHtml}
                 </div>
-
                 ${boardHtml}
                 <div class="memo" style="margin-top: 20px; text-align: center;">💡 <b>장비 정보 조회:</b> 위 보드에서 영웅을 클릭하면 해당 영웅의 장비를 볼 수 있습니다.</div>
-            </div>
-        `;
+            </div>`;
         viewingDeck = deck; 
         renderReadonlyBoard('castleHeroBoard', 'castlePetSlot', deck, false, true);
     } else {
         let addBtn = isAdminMaster ? `<button class="btn btn-primary" style="width: 100%; margin-top: 15px;" onclick="openDeckBuilder('castle_new', null, null, ${dayIdx})">+ ${dayNames[dayIdx]}요일 공성전 빌드 등록하기</button>` : '';
-        contentDiv.innerHTML = `
-            <div style="text-align:center; padding: 40px 20px; background: white; border-radius: 10px; border: 1px dashed #bdc3c7;">
-                <h3 style="color: #7f8c8d; margin-bottom: 10px;">아직 등록된 족보가 없습니다.</h3>
-                <p style="font-size: 14px; color: #95a5a6;">관리자 및 길드장 권한만 등록 가능합니다.</p>
-                ${addBtn}
-            </div>
-        `;
+        contentDiv.innerHTML = `<div style="text-align:center; padding: 40px 20px; background: white; border-radius: 10px; border: 1px dashed #bdc3c7;"><h3 style="color: #7f8c8d; margin-bottom: 10px;">아직 등록된 족보가 없습니다.</h3><p style="font-size: 14px; color: #95a5a6;">관리자 및 길드장 권한만 등록 가능합니다.</p>${addBtn}</div>`;
     }
 }
+function deleteCastleDeck(dayIdx) { if(confirm("정말 이 공성전 빌드를 삭제하시겠습니까?")) { const idx = mockCastleDecks.findIndex(d => d.day === dayIdx); if(idx !== -1) { db.collection('castleDecks').doc(String(mockCastleDecks[idx].id)).delete(); mockCastleDecks.splice(idx, 1); } saveDecksDB(); renderCastleTab(dayIdx); } }
 
-function deleteCastleDeck(dayIdx) {
-    if(confirm("정말 이 공성전 빌드를 삭제하시겠습니까?")) {
-        const idx = mockCastleDecks.findIndex(d => d.day === dayIdx);
-        if(idx !== -1) { db.collection('castleDecks').doc(String(mockCastleDecks[idx].id)).delete(); mockCastleDecks.splice(idx, 1); }
-        saveDecksDB(); renderCastleTab(dayIdx);
+/* 🐉 강림원정대 렌더링 */
+function renderRaidTab(bossName) {
+    currentRaidBoss = bossName;
+    const tabs = document.querySelectorAll('#raidTabsContainer .tab-btn');
+    tabs.forEach(tab => tab.classList.remove('active'));
+    document.getElementById(`r-tab-${bossName}`).classList.add('active');
+
+    const contentDiv = document.getElementById('raidListContent');
+    contentDiv.innerHTML = '';
+    
+    const isHighRank = currentUser && ['admin', 'master', 'elite'].includes(currentUser.role);
+    document.getElementById('raidAddDeckBtn').style.display = isHighRank ? 'block' : 'none';
+
+    const decks = mockRaidDecks.filter(d => d.boss === bossName);
+    if (decks.length > 0) {
+        decks.forEach(deck => {
+            const h1 = deck.r1.slots.filter(h=>h).map(h => getMiniHeroHTML(h)).join('');
+            const h2 = deck.r2.slots.filter(h=>h).map(h => getMiniHeroHTML(h)).join('');
+            contentDiv.innerHTML += `
+                <div class="raid-deck" onclick="viewDeckDetail('raid', ${deck.id})">
+                    <div>
+                        <div style="font-weight: bold; color: #8e44ad; margin-bottom: 5px;">${deck.name}</div>
+                        <div style="font-size: 13px; color: #555;">💡 ${deck.desc || '설명이 없습니다.'}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size: 11px; color:#7f8c8d; margin-bottom:3px;">1R <span class="mini-hero-list" style="display:inline-flex;">${h1}</span></div>
+                        <div style="font-size: 11px; color:#7f8c8d;">2R <span class="mini-hero-list" style="display:inline-flex;">${h2}</span></div>
+                    </div>
+                </div>
+            `;
+        });
+    } else {
+        contentDiv.innerHTML = `<div style="text-align:center; padding: 30px; color: #7f8c8d;">등록된 빌드가 없습니다.</div>`;
     }
 }
+function handleAddNewRaidBtn() { openDeckBuilder('raid_new', null, null, null, currentRaidBoss); }
 
 function setAttackSortMode(mode) { attackSortMode = mode; switchMainTab('attack'); }
 
@@ -306,7 +308,8 @@ function switchMainTab(tabType) {
         document.getElementById('tab-attack').classList.add('active'); sortContainer.style.display = 'flex';
         document.getElementById('sortWinRateBtn').className = attackSortMode === 'winrate' ? 'sort-btn active' : 'sort-btn';
         document.getElementById('sortLatestBtn').className = attackSortMode === 'latest' ? 'sort-btn active' : 'sort-btn';
-        const isHighRank = currentUser && ['admin', 'master', 'elite'].includes(currentUser.role);
+        
+        const isHighRank = Boolean(currentUser && currentUser.role && ['admin', 'master', 'elite'].includes(currentUser.role));
         addBtn.style.display = isHighRank ? 'block' : 'none'; addBtn.innerText = '+ 적 방어 덱 등록하기';
         let html = '';
         mockAttackDecks.forEach(deck => {
@@ -361,84 +364,184 @@ function switchMainTab(tabType) {
 function viewDeckDetail(type, id1, id2) {
     viewingDeckType = type;
     const conceptBadge = document.getElementById('detailDeckConcept');
-    
-    if (type === 'defense') {
-        viewingDeck = mockDefenseDecks.find(d => d.id === id1);
-        if (!viewingDeck) return;
-        document.getElementById('detailDeckTitle').innerText = viewingDeck.name || '이름 없는 방어 덱';
-        if (viewingDeck.concept && viewingDeck.concept !== '상관없음') { conceptBadge.style.display = 'inline-block'; conceptBadge.className = `badge-concept ${getConceptClass(viewingDeck.concept)}`; conceptBadge.innerText = viewingDeck.concept; } else { conceptBadge.style.display = 'none'; }
+    const normalContent = document.getElementById('normalDetailContent');
+    const raidContent = document.getElementById('raidDetailContent');
+    const speedOrderDiv = document.getElementById('detailSpeedOrder');
+
+    if (type === 'raid') {
+        viewingDeck = mockRaidDecks.find(d => d.id === id1);
+        if(!viewingDeck) return;
+        document.getElementById('detailDeckTitle').innerText = viewingDeck.name || '이름 없는 빌드';
+        conceptBadge.style.display = 'none';
+        
+        normalContent.style.display = 'none';
+        raidContent.style.display = 'block';
+        speedOrderDiv.style.display = 'none';
+        
+        // 💡 1라운드 스킬, 2라운드 스킬 독립적 로드 (기존 합쳐진 데이터 호환용 방어코드 포함)
+        const r1Skills = viewingDeck.r1.skills || (viewingDeck.skills ? viewingDeck.skills.filter(s => viewingDeck.r1.slots.includes(s.hero)) : []);
+        const r2Skills = viewingDeck.r2.skills || (viewingDeck.skills ? viewingDeck.skills.filter(s => viewingDeck.r2.slots.includes(s.hero)) : []);
+
+        const makeSkillHtml = (skillsArr) => {
+            let html = '<div class="skill-grid-flex">';
+            if(skillsArr.length > 0) {
+                skillsArr.forEach(s => {
+                    let hero = s.hero; let skillNum = s.skillNum;
+                    html += `<div class="skill-slot filled castle-slot" style="cursor:default;"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span><div class="skill-text-label">스킬 ${skillNum}</div></div>`;
+                });
+            } else { 
+                html += '<div style="width:100%; text-align:center; color:#7f8c8d; font-size:13px; padding:10px;">설정된 스킬 순서가 없습니다.</div>'; 
+            }
+            html += '</div>';
+            return html;
+        };
+
+        // 💡 직관적인 상하 배치 (1R스킬 -> 2R스킬 -> 1R보드 -> 2R보드)
+        raidContent.innerHTML = `
+            <div style="background: white; padding: 20px; border-radius: 10px; border: 1px solid #ddd; margin-bottom:20px;">
+                <div style="display: flex; flex-direction: column; gap: 30px;">
+                    
+                    <div style="background: #fafafa; padding: 15px; border-radius: 10px; border: 1px solid #eee;">
+                        <h4 style="color: #8e44ad; text-align: center; margin-top: 0; margin-bottom: 15px;">⚔️ 1라운드 스킬 순서</h4>
+                        <div style="display: flex; justify-content: center;">${makeSkillHtml(r1Skills)}</div>
+                    </div>
+                    
+                    <div style="background: #fafafa; padding: 15px; border-radius: 10px; border: 1px solid #eee;">
+                        <h4 style="color: #8e44ad; text-align: center; margin-top: 0; margin-bottom: 15px;">⚔️ 2라운드 스킬 순서</h4>
+                        <div style="display: flex; justify-content: center;">${makeSkillHtml(r2Skills)}</div>
+                    </div>
+
+                    <div style="background: #fafafa; padding: 15px; border-radius: 10px; border: 1px solid #eee;">
+                        <h4 style="text-align:center; color:#2c3e50; margin-top:0; border-bottom:2px dashed #ddd; padding-bottom:10px;">🎯 1라운드 구성</h4>
+                        <div style="text-align: center; color: #e67e22; font-size: 14px; margin-bottom: 15px; font-weight: bold;">⚡ 1R 추천 속공: <span style="color:#d35400;">${viewingDeck.r1.speedOrder || '없음'}</span></div>
+                        <div class="board-container"><div class="hero-board castle-layout" id="raidBoard1"></div><div class="pet-slot filled" id="raidPet1"></div></div>
+                    </div>
+                    
+                    <div style="background: #fafafa; padding: 15px; border-radius: 10px; border: 1px solid #eee;">
+                        <h4 style="text-align:center; color:#2c3e50; margin-top:0; border-bottom:2px dashed #ddd; padding-bottom:10px;">🎯 2라운드 구성</h4>
+                        <div style="text-align: center; color: #e67e22; font-size: 14px; margin-bottom: 15px; font-weight: bold;">⚡ 2R 추천 속공: <span style="color:#d35400;">${viewingDeck.r2.speedOrder || '없음'}</span></div>
+                        <div class="board-container"><div class="hero-board castle-layout" id="raidBoard2"></div><div class="pet-slot filled" id="raidPet2"></div></div>
+                    </div>
+
+                </div>
+            </div>
+        `;
+
+        setTimeout(() => { 
+            renderReadonlyBoard(`raidBoard1`, `raidPet1`, viewingDeck.r1, false, true); 
+            renderReadonlyBoard(`raidBoard2`, `raidPet2`, viewingDeck.r2, false, true); 
+        }, 10);
+
         currentTargetDeckId = null; currentCounterDeckId = null;
+
     } else {
-        currentTargetDeckId = id1; currentCounterDeckId = id2;
-        const target = mockAttackDecks.find(d => d.id === id1);
-        viewingDeck = target ? target.counters.find(c => c.id === id2) : null;
-        if (!viewingDeck) return;
-        document.getElementById('detailDeckTitle').innerText = '🔥 카운터 덱 상세정보'; conceptBadge.style.display = 'none'; 
+        raidContent.style.display = 'none'; normalContent.style.display = 'block'; 
+        
+        if (type === 'defense') {
+            viewingDeck = mockDefenseDecks.find(d => d.id === id1);
+            if (!viewingDeck) return;
+            document.getElementById('detailDeckTitle').innerText = viewingDeck.name || '이름 없는 방어 덱';
+            if (viewingDeck.concept && viewingDeck.concept !== '상관없음') { conceptBadge.style.display = 'inline-block'; conceptBadge.className = `badge-concept ${getConceptClass(viewingDeck.concept)}`; conceptBadge.innerText = viewingDeck.concept; } else { conceptBadge.style.display = 'none'; }
+            speedOrderDiv.style.display = 'none';
+            currentTargetDeckId = null; currentCounterDeckId = null;
+        } else {
+            currentTargetDeckId = id1; currentCounterDeckId = id2;
+            const target = mockAttackDecks.find(d => d.id === id1);
+            viewingDeck = target ? target.counters.find(c => c.id === id2) : null;
+            if (!viewingDeck) return;
+            document.getElementById('detailDeckTitle').innerText = '🔥 카운터 덱 상세정보'; conceptBadge.style.display = 'none'; 
+            speedOrderDiv.style.display = 'none';
+        }
+        
+        renderReadonlyBoard('detailHeroBoard', 'detailPetSlot', viewingDeck, false, false);
+        const skillDiv = document.getElementById('detailSkillQueue'); 
+        skillDiv.className = 'skill-grid-3'; let skillsHtml = '';
+        if (viewingDeck.skills && viewingDeck.skills.some(s => s !== null)) {
+            viewingDeck.skills.forEach(s => {
+                if (s !== null) {
+                    let hero = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : ''); let skillNum = s.skillNum || (typeof s === 'string' ? s.split(' 스킬 ')[1] : '');
+                    skillsHtml += `<div class="skill-slot filled" style="cursor:default;" title="${hero} 스킬 ${skillNum}"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span><div class="skill-text-label">스킬 ${skillNum}</div></div>`;
+                } else { skillsHtml += `<div class="skill-slot empty" style="cursor:default;"></div>`; }
+            });
+        } else { skillsHtml = '<div style="color:#7f8c8d; font-size:14px; padding: 20px; width:100%; text-align:center;">설정된 스킬 순서가 없습니다.</div>'; }
+        skillDiv.innerHTML = skillsHtml;
     }
 
     document.getElementById('detailDeckDesc').innerText = viewingDeck.desc ? `💡 ${viewingDeck.desc}` : '💡 설명이 없습니다.';
     document.getElementById('detailDeckAuthor').innerText = `작성자: ${viewingDeck.authorNick || '알 수 없음'}`;
-
     const isAuthor = currentUser && viewingDeck.authorId === currentUser.id;
     const isHighRank = currentUser && ['admin', 'master', 'elite'].includes(currentUser.role);
     const hasPermission = isAuthor || isHighRank;
     document.getElementById('deleteDeckBtn').style.display = hasPermission ? 'inline-block' : 'none'; document.getElementById('editDeckBtn').style.display = hasPermission ? 'inline-block' : 'none';
-
-    renderReadonlyBoard('detailHeroBoard', 'detailPetSlot', viewingDeck, false, false);
     
-    const skillDiv = document.getElementById('detailSkillQueue'); 
-    skillDiv.className = 'skill-grid-3';
-    let skillsHtml = '';
-    
-    if (viewingDeck.skills && viewingDeck.skills.some(s => s !== null)) {
-        viewingDeck.skills.forEach(s => {
-            if (s !== null) {
-                let hero = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : '');
-                let skillNum = s.skillNum || (typeof s === 'string' ? s.split(' 스킬 ')[1] : '');
-                skillsHtml += `
-                    <div class="skill-slot filled" style="cursor:default;" title="${hero} 스킬 ${skillNum}">
-                        <img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;">
-                        <span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span>
-                        <div class="skill-text-label">스킬 ${skillNum}</div>
-                    </div>
-                `;
-            } else {
-                skillsHtml += `<div class="skill-slot empty" style="cursor:default;"></div>`;
-            }
-        });
-    } else { skillsHtml = '<div style="color:#7f8c8d; font-size:14px; padding: 20px; width:100%; text-align:center;">설정된 스킬 순서가 없습니다.</div>'; }
-    skillDiv.innerHTML = skillsHtml;
     toggleView('deckDetailView');
 }
 
-function handleDetailBackBtn() { toggleView('mainListView'); }
+function handleDetailBackBtn() { if(viewingDeckType === 'raid') toggleView('raidView'); else toggleView('mainListView'); }
 
 function handleAddNewDeckBtn() {
+    if (!currentUser) return alert('🚨 로그인이 필요합니다.');
+    const isHighRank = Boolean(currentUser && currentUser.role && ['admin', 'master', 'elite'].includes(currentUser.role));
+
     if (currentMainTab === 'attack') {
-        if (!currentUser || !['admin', 'master', 'elite'].includes(currentUser.role)) return alert('🚨 적 방어덱 등록은 정예 길드원 이상만 가능합니다.');
+        if (!isHighRank) return alert('🚨 적 방어덱 등록은 정예 길드원 이상만 가능합니다.');
         openDeckBuilder('attack_target_new');
     } else {
-        if (!currentUser) return alert('로그인이 필요합니다.'); openDeckBuilder('defense_new');
+        openDeckBuilder('defense_new');
     }
 }
 
-function handleBuilderBackBtn() { if (builderMode.startsWith('castle')) { toggleView('castleView'); } else { toggleView('mainListView'); } }
+function handleBuilderBackBtn() { 
+    if (builderMode.startsWith('castle')) { toggleView('castleView'); } 
+    else if (builderMode.startsWith('raid')) { toggleView('raidView'); }
+    else { toggleView('mainListView'); } 
+}
 
 function deleteAttackTarget(targetId) { if(confirm("이 적 방어 덱과 하위의 카운터 덱이 모두 삭제됩니다.\n정말 삭제하시겠습니까?")) { const idx = mockAttackDecks.findIndex(d => d.id === targetId); if(idx !== -1) { db.collection('attackDecks').doc(String(targetId)).delete(); mockAttackDecks.splice(idx, 1); } saveDecksDB(); switchMainTab('attack'); } }
 function deleteCounterDeck(targetId, counterId) { if(confirm("이 카운터 덱을 정말 삭제하시겠습니까?")) { const target = mockAttackDecks.find(d => d.id === targetId); const idx = target.counters.findIndex(c => c.id === counterId); if(idx !== -1) target.counters.splice(idx, 1); saveDecksDB(); switchMainTab('attack'); } }
+
 function deleteCurrentDeck() {
     if(confirm("정말 이 덱을 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.")) {
-        if (viewingDeckType === 'defense') { const idx = mockDefenseDecks.findIndex(d => d.id === viewingDeck.id); if(idx !== -1) { db.collection('defenseDecks').doc(String(viewingDeck.id)).delete(); mockDefenseDecks.splice(idx, 1); } } else { const target = mockAttackDecks.find(d => d.id === currentTargetDeckId); const idx = target.counters.findIndex(c => c.id === viewingDeck.id); if(idx !== -1) target.counters.splice(idx, 1); }
-        saveDecksDB(); alert("✅ 덱이 정상적으로 삭제되었습니다."); resetBuilderState(); toggleView('mainListView');
+        let targetView = 'mainListView';
+        
+        if (viewingDeckType === 'defense') { 
+            const idx = mockDefenseDecks.findIndex(d => d.id === viewingDeck.id); 
+            if(idx !== -1) { db.collection('defenseDecks').doc(String(viewingDeck.id)).delete(); mockDefenseDecks.splice(idx, 1); } 
+        } 
+        else if (viewingDeckType === 'raid') { 
+            const idx = mockRaidDecks.findIndex(d => d.id === viewingDeck.id); 
+            if(idx !== -1) { db.collection('raidDecks').doc(String(viewingDeck.id)).delete(); mockRaidDecks.splice(idx, 1); } 
+            targetView = 'raidView';
+        }
+        else { 
+            const target = mockAttackDecks.find(d => d.id === currentTargetDeckId); 
+            const idx = target.counters.findIndex(c => c.id === viewingDeck.id); 
+            if(idx !== -1) target.counters.splice(idx, 1); 
+        }
+        
+        saveDecksDB(); 
+        alert("✅ 삭제되었습니다."); 
+        
+        if (targetView === 'raidView') {
+            toggleView('raidView'); 
+            renderRaidTab(currentRaidBoss); 
+        } else {
+            toggleView('mainListView'); 
+        }
     }
 }
 
-function editCurrentDeck() { if (viewingDeckType === 'defense') openDeckBuilder('defense_edit'); else openDeckBuilder('attack_counter_edit', currentTargetDeckId, viewingDeck.id); }
+function editCurrentDeck() { 
+    if (viewingDeckType === 'defense') openDeckBuilder('defense_edit'); 
+    else if (viewingDeckType === 'raid') openDeckBuilder('raid_edit', viewingDeck.id, null, null, currentRaidBoss);
+    else openDeckBuilder('attack_counter_edit', currentTargetDeckId, viewingDeck.id); 
+}
 
 function voteCounter(targetId, counterId, type) {
     if (!currentUser) return alert("로그인이 필요합니다.");
+    const isHighRank = Boolean(currentUser && currentUser.role && ['admin', 'master'].includes(currentUser.role));
     const target = mockAttackDecks.find(d => d.id === targetId); const counter = target.counters.find(c => c.id === counterId);
-    const isHighRank = ['admin', 'master'].includes(currentUser.role);
+    
     if (!isHighRank) { const lastVoteTime = counter.votes ? counter.votes[currentUser.id] : 0; if (lastVoteTime && (Date.now() - lastVoteTime) < 48 * 60 * 60 * 1000) { return alert("승패 기록은 48시간에 한 번만 투표할 수 있습니다."); } }
     if (!counter.votes) counter.votes = {}; counter.votes[currentUser.id] = Date.now();
     if (type === 'win') counter.wins = (counter.wins || 0) + 1; else counter.losses = (counter.losses || 0) + 1;
@@ -454,87 +557,219 @@ function openAdminVoteModal(targetId, counterId) {
 function closeAdminVoteModal() { document.getElementById('adminVoteModal').style.display = 'none'; }
 function saveAdminVote() { const target = mockAttackDecks.find(d => d.id === adminVoteTargetId); const counter = target.counters.find(c => c.id === adminVoteCounterId); counter.wins = parseInt(document.getElementById('adminWinsInput').value, 10) || 0; counter.losses = parseInt(document.getElementById('adminLossesInput').value, 10) || 0; saveDecksDB(); closeAdminVoteModal(); switchMainTab('attack'); }
 
-function openDeckBuilder(mode, targetId = null, counterId = null, dayIdx = null) {
-    resetBuilderState();
-    builderMode = mode;
-    currentTargetDeckId = targetId; currentCounterDeckId = counterId;
+function openDeckBuilder(mode, targetId = null, counterId = null, dayIdx = null, bossName = null) {
+    const backupDeck = viewingDeck; 
+    try {
+        resetBuilderState();
+        if (mode.includes('edit')) viewingDeck = backupDeck; 
 
-    const attackNameContainer = document.getElementById('attackDeckNameContainer'); const deckNameContainer = document.getElementById('deckNameContainer'); const conceptContainer = document.getElementById('conceptContainer'); const detailTabBtn = document.getElementById('b-tab-detail'); const nextBtn = document.getElementById('builderNextBtn'); const saveAtConfigBtn = document.getElementById('builderSaveBtnAtConfig'); const builderTitle = document.getElementById('builderTitle'); const roundContainer = document.getElementById('roundSelectContainer');
-    const speedOrderContainer = document.getElementById('speedOrderContainer'); 
-
-    if (mode.startsWith('castle')) {
-        currentCastleDay = dayIdx;
-        attackNameContainer.style.display = 'none'; deckNameContainer.style.display = 'none'; conceptContainer.style.display = 'none'; detailTabBtn.style.display = 'block'; nextBtn.style.display = 'inline-block'; saveAtConfigBtn.style.display = 'none'; roundContainer.style.display = 'block';
-        speedOrderContainer.style.display = 'block'; 
-        builderTitle.innerText = `🛠️ ${dayNames[currentCastleDay]}요일 공성전 빌드 (최대 5명)`;
+        builderMode = mode; 
+        currentTargetDeckId = targetId; 
+        currentCounterDeckId = counterId;
         
-        if (mode === 'castle_edit') {
-            const deck = mockCastleDecks.find(d => d.day === dayIdx);
-            if(deck) {
-                document.getElementById('formationType').value = deck.formation || 'basic';
-                boardSlots = [...(deck.slots || [])]; currentSelectedPet = deck.pet; document.getElementById('deckDescInput').value = deck.desc || ''; heroEquipments = JSON.parse(JSON.stringify(deck.equips || {}));
-                document.getElementById('deckSpeedOrderInput').value = deck.speedOrder || ''; 
-                skillQueue = deck.skills ? [...deck.skills] : new Array(20).fill(null);
-                while(skillQueue.length < 20) skillQueue.push(null);
+        const nTabs = document.getElementById('normalBuilderTabs'); 
+        const rTabs = document.getElementById('raidBuilderTabs');
+        const attackNameContainer = document.getElementById('attackDeckNameContainer'); 
+        const deckNameContainer = document.getElementById('deckNameContainer'); 
+        const conceptContainer = document.getElementById('conceptContainer'); 
+        const nextBtn = document.getElementById('builderNextBtn'); 
+        const saveAtConfigBtn = document.getElementById('builderSaveBtnAtConfig'); 
+        const builderTitle = document.getElementById('builderTitle'); 
+        const roundContainer = document.getElementById('roundSelectContainer'); 
+        const speedOrderContainer = document.getElementById('speedOrderContainer'); 
+        const raidSpeedOrderContainer = document.getElementById('raidSpeedOrderContainer'); 
+        const raidToggle = document.getElementById('raidDetailRoundToggle');
+
+        if(nTabs) nTabs.style.display = 'none';
+        if(rTabs) rTabs.style.display = 'none';
+        if(attackNameContainer) attackNameContainer.style.display = 'none';
+        if(deckNameContainer) deckNameContainer.style.display = 'none';
+        if(conceptContainer) conceptContainer.style.display = 'none';
+        if(nextBtn) nextBtn.style.display = 'inline-block';
+        if(saveAtConfigBtn) saveAtConfigBtn.style.display = 'none';
+        if(roundContainer) roundContainer.style.display = 'none';
+        if(speedOrderContainer) speedOrderContainer.style.display = 'none';
+        if(raidSpeedOrderContainer) raidSpeedOrderContainer.style.display = 'none';
+        if(raidToggle) raidToggle.style.display = 'none';
+
+        if (mode.startsWith('raid')) {
+            currentRaidBoss = bossName;
+            if(rTabs) rTabs.style.display = 'flex';
+            if(deckNameContainer) deckNameContainer.style.display = 'block';
+            if(raidSpeedOrderContainer) raidSpeedOrderContainer.style.display = 'flex';
+            if(raidToggle) raidToggle.style.display = 'flex';
+            if(builderTitle) builderTitle.innerText = `🛠️ 강림원정대 ${currentRaidBoss} 빌드 (최대 5명)`;
+            
+            if (mode === 'raid_edit' && viewingDeck) {
+                document.getElementById('deckNameInput').value = viewingDeck.name || ''; 
+                document.getElementById('deckDescInput').value = viewingDeck.desc || ''; 
+                document.getElementById('raidSpeed1').value = (viewingDeck.r1 && viewingDeck.r1.speedOrder) || '';
+                document.getElementById('raidSpeed2').value = (viewingDeck.r2 && viewingDeck.r2.speedOrder) || '';
+                
+                // 💡 기존 스킬이 합쳐져 있던 경우 분리해주는 호환성 코드
+                raidDataBuffer[1] = JSON.parse(JSON.stringify(viewingDeck.r1 || { slots: [], pet: null, equips: {}, skills: [] })); 
+                if(!raidDataBuffer[1].skills && viewingDeck.skills) { raidDataBuffer[1].skills = viewingDeck.skills.filter(s => raidDataBuffer[1].slots.includes(s.hero)); }
+                
+                raidDataBuffer[2] = JSON.parse(JSON.stringify(viewingDeck.r2 || { slots: [], pet: null, equips: {}, skills: [] }));
+                if(!raidDataBuffer[2].skills && viewingDeck.skills) { raidDataBuffer[2].skills = viewingDeck.skills.filter(s => raidDataBuffer[2].slots.includes(s.hero)); }
+                
+            } else {
+                skillQueue = [];
             }
-        } else { skillQueue = new Array(20).fill(null); }
-    } else if (mode.startsWith('attack_target')) {
-        attackNameContainer.style.display = 'block'; deckNameContainer.style.display = 'none'; conceptContainer.style.display = 'none'; detailTabBtn.style.display = 'none'; nextBtn.style.display = 'none'; saveAtConfigBtn.style.display = 'inline-block'; roundContainer.style.display = 'none';
-        speedOrderContainer.style.display = 'none';
-        builderTitle.innerText = mode === 'attack_target_edit' ? '🛠️ 적 방어 덱 수정' : '🛠️ 적 방어 덱 등록';
-        if (mode === 'attack_target_edit') { const target = mockAttackDecks.find(d => d.id === targetId); document.getElementById('attackDeckNameInput').value = target.targetName; document.getElementById('formationType').value = target.formation || 'basic'; boardSlots = [...(target.targetHeroes || [])]; currentSelectedPet = target.targetPet; }
-    } else if (mode.startsWith('attack_counter')) {
-        attackNameContainer.style.display = 'none'; deckNameContainer.style.display = 'none'; conceptContainer.style.display = 'none'; detailTabBtn.style.display = 'block'; nextBtn.style.display = 'inline-block'; saveAtConfigBtn.style.display = 'none'; roundContainer.style.display = 'none';
-        speedOrderContainer.style.display = 'none';
-        builderTitle.innerText = mode === 'attack_counter_edit' ? '🛠️ 카운터 덱 수정' : '🛠️ 카운터 덱 등록';
-        if (mode === 'attack_counter_edit') { const target = mockAttackDecks.find(d => d.id === targetId); const counter = target.counters.find(c => c.id === counterId); document.getElementById('formationType').value = counter.formation || 'basic'; boardSlots = [...(counter.heroes || [])]; currentSelectedPet = counter.pet; document.getElementById('deckDescInput').value = counter.desc || ''; heroEquipments = JSON.parse(JSON.stringify(counter.equips || {})); skillQueue = counter.skills ? [...counter.skills] : new Array(3).fill(null); while(skillQueue.length < 3) skillQueue.push(null); } else { skillQueue = new Array(3).fill(null); }
-    } else {
-        attackNameContainer.style.display = 'none'; deckNameContainer.style.display = 'block'; conceptContainer.style.display = 'block'; detailTabBtn.style.display = 'block'; nextBtn.style.display = 'inline-block'; saveAtConfigBtn.style.display = 'none'; roundContainer.style.display = 'none';
-        speedOrderContainer.style.display = 'none';
-        builderTitle.innerText = mode === 'defense_edit' ? '🛠️ 방어 덱 수정' : '🛠️ 방어 추천 덱 구성';
-        if (mode === 'defense_edit') { document.getElementById('formationType').value = viewingDeck.formation || 'basic'; boardSlots = [...(viewingDeck.slots || [])]; currentSelectedPet = viewingDeck.pet; document.getElementById('deckNameInput').value = viewingDeck.name || ''; document.getElementById('deckDescInput').value = viewingDeck.desc || ''; document.getElementById('deckConceptSelect').value = viewingDeck.concept || '상관없음'; heroEquipments = JSON.parse(JSON.stringify(viewingDeck.equips || {})); skillQueue = viewingDeck.skills ? [...viewingDeck.skills] : new Array(3).fill(null); while(skillQueue.length < 3) skillQueue.push(null); } else { skillQueue = new Array(3).fill(null); }
+            loadRaidRoundToBuilder(1);
+
+        } else if (mode.startsWith('castle')) {
+            currentCastleDay = dayIdx;
+            if(nTabs) nTabs.style.display = 'flex';
+            if(roundContainer) roundContainer.style.display = 'block';
+            if(speedOrderContainer) speedOrderContainer.style.display = 'block';
+            if(builderTitle) builderTitle.innerText = `🛠️ ${dayNames[currentCastleDay]}요일 공성전 빌드 (최대 5명)`;
+            
+            if (mode === 'castle_edit' && viewingDeck) {
+                document.getElementById('formationType').value = viewingDeck.formation || 'basic'; 
+                boardSlots = [...(viewingDeck.slots || [])]; 
+                currentSelectedPet = viewingDeck.pet; 
+                document.getElementById('deckDescInput').value = viewingDeck.desc || ''; 
+                heroEquipments = JSON.parse(JSON.stringify(viewingDeck.equips || {})); 
+                document.getElementById('deckSpeedOrderInput').value = viewingDeck.speedOrder || ''; 
+                skillQueue = viewingDeck.skills ? [...viewingDeck.skills] : new Array(20).fill(null); 
+                while(skillQueue.length < 20) skillQueue.push(null);
+            } else { 
+                skillQueue = new Array(20).fill(null); 
+            }
+
+        } else if (mode.startsWith('attack_target')) {
+            if(attackNameContainer) attackNameContainer.style.display = 'block';
+            if(nextBtn) nextBtn.style.display = 'none';
+            if(saveAtConfigBtn) saveAtConfigBtn.style.display = 'inline-block';
+            if(builderTitle) builderTitle.innerText = mode === 'attack_target_edit' ? '🛠️ 적 방어 덱 수정' : '🛠️ 적 방어 덱 등록';
+            
+            if (mode === 'attack_target_edit') { 
+                const target = mockAttackDecks.find(d => d.id === targetId); 
+                if(target) {
+                    document.getElementById('attackDeckNameInput').value = target.targetName || ''; 
+                    document.getElementById('formationType').value = target.formation || 'basic'; 
+                    boardSlots = [...(target.targetHeroes || [])]; 
+                    currentSelectedPet = target.targetPet; 
+                }
+            }
+
+        } else if (mode.startsWith('attack_counter')) {
+            if(nTabs) nTabs.style.display = 'flex';
+            if(builderTitle) builderTitle.innerText = mode === 'attack_counter_edit' ? '🛠️ 카운터 덱 수정' : '🛠️ 카운터 덱 등록';
+            
+            if (mode === 'attack_counter_edit' && viewingDeck) { 
+                document.getElementById('formationType').value = viewingDeck.formation || 'basic'; 
+                boardSlots = [...(viewingDeck.heroes || [])]; 
+                currentSelectedPet = viewingDeck.pet; 
+                document.getElementById('deckDescInput').value = viewingDeck.desc || ''; 
+                heroEquipments = JSON.parse(JSON.stringify(viewingDeck.equips || {})); 
+                skillQueue = viewingDeck.skills ? [...viewingDeck.skills] : new Array(3).fill(null); 
+                while(skillQueue.length < 3) skillQueue.push(null); 
+            } else { 
+                skillQueue = new Array(3).fill(null); 
+            }
+
+        } else {
+            if(nTabs) nTabs.style.display = 'flex';
+            if(deckNameContainer) deckNameContainer.style.display = 'block';
+            if(conceptContainer) conceptContainer.style.display = 'block';
+            if(builderTitle) builderTitle.innerText = mode === 'defense_edit' ? '🛠️ 방어 덱 수정' : '🛠️ 방어 추천 덱 구성';
+            
+            if (mode === 'defense_edit' && viewingDeck) { 
+                document.getElementById('formationType').value = viewingDeck.formation || 'basic'; 
+                boardSlots = [...(viewingDeck.slots || [])]; 
+                currentSelectedPet = viewingDeck.pet; 
+                document.getElementById('deckNameInput').value = viewingDeck.name || ''; 
+                document.getElementById('deckDescInput').value = viewingDeck.desc || ''; 
+                document.getElementById('deckConceptSelect').value = viewingDeck.concept || '상관없음'; 
+                heroEquipments = JSON.parse(JSON.stringify(viewingDeck.equips || {})); 
+                skillQueue = viewingDeck.skills ? [...viewingDeck.skills] : new Array(3).fill(null); 
+                while(skillQueue.length < 3) skillQueue.push(null); 
+            } else { 
+                skillQueue = new Array(3).fill(null); 
+            }
+        }
+        
+        toggleView('deckBuilderView'); 
+        switchBuilderTab(builderMode.startsWith('raid') ? 'r1' : 'config');
+        
+    } catch (error) {
+        console.error("openDeckBuilder Error:", error);
+        alert("덱 추가/수정 창을 여는 중 일시적인 오류가 발생했습니다. 창을 새로고침(F5) 해주세요.");
     }
+}
+
+function saveCurrentRaidRound() {
+    if(!builderMode.startsWith('raid')) return;
+    raidDataBuffer[currentRaidRound] = { 
+        slots: [...boardSlots], 
+        pet: currentSelectedPet, 
+        equips: JSON.parse(JSON.stringify(heroEquipments)), 
+        formation: document.getElementById('formationType').value,
+        skills: [...skillQueue] // 💡 이제 각 라운드마다 독립적으로 스킬을 저장합니다!
+    };
+}
+
+function loadRaidRoundToBuilder(round) {
+    currentRaidRound = round; const data = raidDataBuffer[round];
+    boardSlots = [...data.slots]; currentSelectedPet = data.pet; heroEquipments = JSON.parse(JSON.stringify(data.equips)); document.getElementById('formationType').value = data.formation || 'basic';
+    skillQueue = data.skills ? [...data.skills] : []; // 💡 스킬도 독립적으로 로드
+    renderBuilderBoard(); applyFilters();
+}
+
+function handleBuilderNextBtn() {
+    if (builderMode.startsWith('raid')) {
+        saveCurrentRaidRound();
+        if(currentRaidRound === 1) switchBuilderTab('r2');
+        else switchBuilderTab('detail');
+    } else { switchBuilderTab('detail'); }
+}
+
+function loadRaidDetailRound(round) {
+    saveCurrentRaidRound(); 
+    loadRaidRoundToBuilder(round); // 보드 슬롯과 스킬 큐가 선택한 라운드의 것으로 변경됨
     
-    toggleView('deckBuilderView'); switchBuilderTab('config');
+    document.getElementById('btn-detail-r1').style.background = round === 1 ? '#34495e' : '#bdc3c7'; document.getElementById('btn-detail-r1').style.color = round === 1 ? 'white' : '#2c3e50';
+    document.getElementById('btn-detail-r2').style.background = round === 2 ? '#34495e' : '#bdc3c7'; document.getElementById('btn-detail-r2').style.color = round === 2 ? 'white' : '#2c3e50';
+    
+    const tempDeck = { formation: document.getElementById('formationType').value, slots: boardSlots, pet: currentSelectedPet, equips: heroEquipments };
+    renderReadonlyBoard('detailInputHeroBoard', 'detailInputPetSlot', tempDeck, true, true);
+    renderAvailableSkills(); // 여기서 렌더링될 때 현재 로드된 해당 라운드의 영웅들만 보입니다!
 }
 
 function switchBuilderTab(tab) {
-    if (tab === 'detail' && boardSlots.filter(h => h !== null).length === 0) return alert('🚨 최소 1명의 영웅을 배치해야 합니다.');
-    document.getElementById('b-tab-config').classList.remove('active'); document.getElementById('b-tab-detail').classList.remove('active');
     document.getElementById('builderConfigSection').style.display = 'none'; document.getElementById('builderDetailSection').style.display = 'none';
-
-    if(tab === 'config') {
-        document.getElementById('b-tab-config').classList.add('active'); document.getElementById('builderConfigSection').style.display = 'block'; activeSlotType = 'hero'; renderBuilderBoard(); applyFilters();
+    
+    if (builderMode.startsWith('raid')) {
+        ['b-tab-r1', 'b-tab-r2', 'b-tab-raid-detail'].forEach(id => document.getElementById(id).classList.remove('active'));
+        if (tab === 'r1' || tab === 'r2') {
+            if(tab === 'r2' && boardSlots.filter(h=>h).length === 0 && currentRaidRound === 1) return alert('1라운드에 영웅을 최소 1명 배치해주세요.');
+            saveCurrentRaidRound(); document.getElementById(`b-tab-${tab}`).classList.add('active'); document.getElementById('builderConfigSection').style.display = 'block'; activeSlotType = 'hero'; loadRaidRoundToBuilder(tab === 'r1' ? 1 : 2);
+        } else if (tab === 'detail') {
+            saveCurrentRaidRound(); document.getElementById('b-tab-raid-detail').classList.add('active'); document.getElementById('builderDetailSection').style.display = 'block'; loadRaidDetailRound(currentRaidRound);
+        }
     } else {
-        document.getElementById('b-tab-detail').classList.add('active'); document.getElementById('builderDetailSection').style.display = 'block';
-        const tempDeck = { formation: document.getElementById('formationType').value, slots: boardSlots, pet: currentSelectedPet, equips: heroEquipments };
-        renderReadonlyBoard('detailInputHeroBoard', 'detailInputPetSlot', tempDeck, true, builderMode.startsWith('castle'));
-        
-        renderAvailableSkills();
+        if (tab === 'detail' && boardSlots.filter(h => h !== null).length === 0) return alert('🚨 최소 1명의 영웅을 배치해야 합니다.');
+        document.getElementById('b-tab-config').classList.remove('active'); document.getElementById('b-tab-detail').classList.remove('active');
+        if(tab === 'config') { document.getElementById('b-tab-config').classList.add('active'); document.getElementById('builderConfigSection').style.display = 'block'; activeSlotType = 'hero'; renderBuilderBoard(); applyFilters(); } 
+        else { document.getElementById('b-tab-detail').classList.add('active'); document.getElementById('builderDetailSection').style.display = 'block'; const tempDeck = { formation: document.getElementById('formationType').value, slots: boardSlots, pet: currentSelectedPet, equips: heroEquipments }; renderReadonlyBoard('detailInputHeroBoard', 'detailInputPetSlot', tempDeck, true, builderMode.startsWith('castle')); renderAvailableSkills(); }
     }
 }
 
 function renderReadonlyBoard(boardId, petId, deckData, isEditMode = false, isCastle = false) {
     if (!deckData) return;
-    
     const boardEl = document.getElementById(boardId);
-    if (isCastle) boardEl.classList.add('castle-layout');
-    else boardEl.classList.remove('castle-layout');
-    
-    const formationType = deckData.formation || 'basic'; 
-    const layout = formations[formationType];
-    const slotsData = deckData.slots || deckData.heroes || [null, null, null, null, null];
+    if (isCastle) boardEl.classList.add('castle-layout'); else boardEl.classList.remove('castle-layout');
+    const formationType = deckData.formation || 'basic'; const layout = formations[formationType]; const slotsData = deckData.slots || deckData.heroes || [null, null, null, null, null];
 
     let html = '';
     ['후열', '전열'].forEach((lineName, lineIdx) => {
         html += `<div class="formation-line"><div class="line-title">${lineName}</div>`;
         const start = lineIdx === 0 ? layout.front : 0; const end = lineIdx === 0 ? 5 : layout.front;
         for(let i = start; i < end; i++) {
-            const h = slotsData[i];
-            const eqClass = (deckData.equips && deckData.equips[h]) ? 'has-equip' : '';
-            let roleStr = ''; if(h) { const heroInfo = heroData.find(x => x.name === h); if(heroInfo) roleStr = heroInfo.role; }
+            const h = slotsData[i]; const eqClass = (deckData.equips && deckData.equips[h]) ? 'has-equip' : ''; let roleStr = ''; if(h) { const heroInfo = heroData.find(x => x.name === h); if(heroInfo) roleStr = heroInfo.role; }
             const bColor = getRoleColor(roleStr);
-
             if(h) { html += `<div class="hero-slot filled ${eqClass}" style="border-color: ${bColor};" onclick="openEquipModal('${h}', ${!isEditMode})"><img src="./images/heroes/${h}.png" onerror="this.src='https://via.placeholder.com/75'"><div class="equip-badge">E</div></div>`; } 
             else { html += `<div class="hero-slot">빈자리</div>`; }
         }
@@ -546,100 +781,108 @@ function renderReadonlyBoard(boardId, petId, deckData, isEditMode = false, isCas
 
 function renderAvailableSkills() {
     const container = document.getElementById('availableSkills'); container.innerHTML = '';
-    const heroes = boardSlots.filter(h => h !== null);
     
-    for(let i=0; i<skillQueue.length; i++) {
-        let s = skillQueue[i];
-        if (s !== null) {
-            let heroName = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : '');
-            if (!heroes.includes(heroName)) skillQueue[i] = null;
-        }
+    // 💡 이제 현재 보고있는 슬롯(현재 라운드)의 영웅만 뜹니다!
+    let heroes = boardSlots.filter(h => h !== null);
+    
+    if(!builderMode.startsWith('raid')) {
+        for(let i=0; i<skillQueue.length; i++) { let s = skillQueue[i]; if (s !== null) { let heroName = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : ''); if (!heroes.includes(heroName)) skillQueue[i] = null; } }
+    } else {
+        for(let i = skillQueue.length - 1; i >= 0; i--) { let s = skillQueue[i]; if (s !== null) { let heroName = s.hero; if (!heroes.includes(heroName)) skillQueue.splice(i, 1); } }
     }
     
     let html = '';
     heroes.forEach(h => {
         html += `<div style="display: flex; flex-direction: column; gap: 8px;">`;
         html += `<button class="skill-btn" style="background-color: #2980b9;" onclick="addSkill('${h}', 2)">${h} 스킬 2</button>`;
-        
-        if (h === '세인') {
-            html += `<div style="height: 31px;"></div>`; 
-        } else {
-            html += `<button class="skill-btn" style="background-color: #34495e;" onclick="addSkill('${h}', 1)">${h} 스킬 1</button>`;
-        }
+        if (h === '세인') { html += `<div style="height: 31px;"></div>`; } else { html += `<button class="skill-btn" style="background-color: #34495e;" onclick="addSkill('${h}', 1)">${h} 스킬 1</button>`; }
         html += `</div>`;
     });
-    
-    container.innerHTML = html;
-    renderSkillQueue();
+    container.innerHTML = html; renderSkillQueue();
 }
 
 function addSkill(hero, skillNum) {
-    const limit = builderMode.startsWith('castle') ? 20 : 3;
-    const firstEmptyIdx = skillQueue.findIndex(s => s === null || s === undefined);
-    if (firstEmptyIdx === -1) return alert(`🚨 스킬 예약은 최대 ${limit}개까지만 가능합니다.`);
-    
-    let roundVal = 1;
-    if (builderMode.startsWith('castle')) {
-        const roundRadio = document.querySelector('input[name="skillRound"]:checked');
-        if (roundRadio) roundVal = parseInt(roundRadio.value);
+    if (builderMode.startsWith('raid')) {
+        if (skillQueue.length >= 20) return alert(`🚨 강림원정대 스킬 예약은 각 라운드당 최대 20개까지만 가능합니다.`);
+        skillQueue.push({ hero: hero, skillNum: skillNum }); 
+    } else {
+        const limit = builderMode.startsWith('castle') ? 20 : 3;
+        const firstEmptyIdx = skillQueue.findIndex(s => s === null || s === undefined);
+        if (firstEmptyIdx === -1) return alert(`🚨 스킬 예약은 최대 ${limit}개까지만 가능합니다.`);
+        let roundVal = 1; if (builderMode.startsWith('castle')) { const roundRadio = document.querySelector('input[name="skillRound"]:checked'); if (roundRadio) roundVal = parseInt(roundRadio.value); }
+        skillQueue[firstEmptyIdx] = { hero: hero, skillNum: skillNum, round: roundVal }; 
     }
-    skillQueue[firstEmptyIdx] = { hero: hero, skillNum: skillNum, round: roundVal }; 
     renderSkillQueue();
 }
 
 function removeSkill(index) { 
     if (index < skillQueue.length) { 
-        skillQueue[index] = null; 
+        if (builderMode.startsWith('raid')) { skillQueue.splice(index, 1); } 
+        else { skillQueue[index] = null; } 
         renderSkillQueue(); 
     } 
 }
 
 function renderSkillQueue() {
-    const limit = builderMode.startsWith('castle') ? 20 : 3;
     const queueDiv = document.getElementById('skillQueue'); 
-    queueDiv.className = builderMode.startsWith('castle') ? 'skill-grid-20' : 'skill-grid-3';
-    let html = '';
-    for (let i = 0; i < limit; i++) {
-        const s = skillQueue[i];
-        if (s !== null && s !== undefined) { 
-            let hero = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : '');
-            let skillNum = s.skillNum || (typeof s === 'string' ? s.split(' 스킬 ')[1] : '');
-            let round = s.round || 1;
-            let roundClass = builderMode.startsWith('castle') ? `round-${round}` : '';
-            let slotClass = builderMode.startsWith('castle') ? 'castle-slot' : '';
-            
-            html += `
-                <div class="skill-slot filled ${roundClass} ${slotClass}" onclick="removeSkill(${i})" title="${hero} 스킬 ${skillNum} (클릭 시 취소)">
-                    <img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;">
-                    <span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span>
-                    <div class="skill-text-label">스킬 ${skillNum}</div>
-                </div>
-            `;
-        } else { 
-            let slotClass = builderMode.startsWith('castle') ? 'castle-slot' : '';
-            html += `<div class="skill-slot empty ${slotClass}" onclick="removeSkill(${i})"><span style="color:#bdc3c7; font-weight:900;">${i+1}</span></div>`; 
+    
+    if (builderMode.startsWith('raid')) {
+        queueDiv.className = 'skill-grid-flex'; let html = '';
+        for (let i = 0; i < skillQueue.length; i++) {
+            const s = skillQueue[i];
+            let hero = s.hero; let skillNum = s.skillNum;
+            html += `<div class="skill-slot filled castle-slot" onclick="removeSkill(${i})" title="${hero} 스킬 ${skillNum} (클릭 시 취소)"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span><div class="skill-text-label">스킬 ${skillNum}</div></div>`;
         }
+        queueDiv.innerHTML = html;
+    } else {
+        const limit = builderMode.startsWith('castle') ? 20 : 3;
+        queueDiv.className = builderMode.startsWith('castle') ? 'skill-grid-20' : 'skill-grid-3'; let html = '';
+        for (let i = 0; i < limit; i++) {
+            const s = skillQueue[i];
+            if (s !== null && s !== undefined) { 
+                let hero = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : ''); let skillNum = s.skillNum || (typeof s === 'string' ? s.split(' 스킬 ')[1] : ''); let round = s.round || 1;
+                let roundClass = builderMode.startsWith('castle') ? `round-${round}` : ''; let slotClass = builderMode.startsWith('castle') ? 'castle-slot' : '';
+                html += `<div class="skill-slot filled ${roundClass} ${slotClass}" onclick="removeSkill(${i})" title="${hero} 스킬 ${skillNum} (클릭 시 취소)"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span><div class="skill-text-label">스킬 ${skillNum}</div></div>`;
+            } else { let slotClass = builderMode.startsWith('castle') ? 'castle-slot' : ''; html += `<div class="skill-slot empty ${slotClass}" onclick="removeSkill(${i})"><span style="color:#bdc3c7; font-weight:900;">${i+1}</span></div>`; }
+        }
+        queueDiv.innerHTML = html;
     }
-    queueDiv.innerHTML = html;
 }
 
 function clickSlot(index) { activeSlotType = 'hero'; if (boardSlots[index]) boardSlots[index] = null; else activeSlotIndex = index; renderBuilderBoard(); applyFilters(); }
 function clickPetSlot() { activeSlotType = 'pet'; if(currentSelectedPet) currentSelectedPet = null; renderBuilderBoard(); applyFilters(); }
+
 function selectHero(heroName) {
     if (boardSlots.includes(heroName)) return boardSlots[boardSlots.indexOf(heroName)] = null, renderBuilderBoard();
-    const limit = builderMode.startsWith('castle') ? 5 : 3;
+    const limit = (builderMode.startsWith('castle') || builderMode.startsWith('raid')) ? 5 : 3;
     if (boardSlots.filter(h => h).length >= limit) return alert(`최대 ${limit}명만 배치 가능합니다!`);
     
+    if (builderMode.startsWith('raid')) {
+        let otherRound = currentRaidRound === 1 ? 2 : 1;
+        if (raidDataBuffer[otherRound].slots.includes(heroName)) {
+            return alert(`🚨 '${heroName}' 영웅은 이미 ${otherRound}라운드에 배치되어 있습니다. (중복 불가)`);
+        }
+    }
+
     if (!boardSlots[activeSlotIndex]) boardSlots[activeSlotIndex] = heroName;
     else { const firstEmpty = boardSlots.findIndex(h => !h); if (firstEmpty !== -1) boardSlots[firstEmpty] = heroName, activeSlotIndex = firstEmpty; }
     const nextEmpty = boardSlots.findIndex(h => !h); if (nextEmpty !== -1) activeSlotIndex = nextEmpty;
     renderBuilderBoard();
 }
-function selectPet(petName) { currentSelectedPet = petName; renderBuilderBoard(); }
+
+function selectPet(petName) { 
+    if (builderMode.startsWith('raid')) {
+        let otherRound = currentRaidRound === 1 ? 2 : 1;
+        if (raidDataBuffer[otherRound].pet === petName) {
+            return alert(`🚨 '${petName}' 펫은 이미 ${otherRound}라운드에 배치되어 있습니다. (중복 불가)`);
+        }
+    }
+    currentSelectedPet = petName; renderBuilderBoard(); 
+}
 
 function renderBuilderBoard() {
     const boardEl = document.getElementById('builderHeroBoard');
-    if (builderMode.startsWith('castle')) boardEl.classList.add('castle-layout');
+    if (builderMode.startsWith('castle') || builderMode.startsWith('raid')) boardEl.classList.add('castle-layout');
     else boardEl.classList.remove('castle-layout');
     
     const layout = formations[document.getElementById('formationType').value];
@@ -700,11 +943,7 @@ function openEquipModal(heroName, isReadOnly) {
     const safeEquips = isReadOnly ? ((viewingDeck && viewingDeck.equips) || {}) : (heroEquipments || {});
     const eq = safeEquips[heroName] || {};
     
-    document.getElementById('eqSet').value = eq.set || '없음'; 
-    document.getElementById('eqMain').value = eq.mainOpt || ''; 
-    document.getElementById('eqAccMain').value = eq.accMain || '없음'; 
-    document.getElementById('eqAccSub').value = eq.accSub || '없음';
-    document.getElementById('eqDetail').value = eq.detail || '';
+    document.getElementById('eqSet').value = eq.set || '없음'; document.getElementById('eqMain').value = eq.mainOpt || ''; document.getElementById('eqAccMain').value = eq.accMain || '없음'; document.getElementById('eqAccSub').value = eq.accSub || '없음'; document.getElementById('eqDetail').value = eq.detail || '';
     
     renderExFields(eq.ex || []);
     if(isReadOnly) { document.getElementById('addExBtn').style.display = 'none'; } else { document.getElementById('addExBtn').style.display = currentExCount >= 4 ? 'none' : 'inline-block'; }
@@ -713,36 +952,53 @@ function openEquipModal(heroName, isReadOnly) {
     inputs.forEach(input => input.disabled = isReadOnly);
     document.getElementById('equipModal').style.display = 'flex';
 }
-
 function closeEquipModal() { document.getElementById('equipModal').style.display = 'none'; }
 function saveEquipData() {
     const exValues = []; for(let i=0; i<currentExCount; i++) exValues.push(document.getElementById(`eqEx${i}`).value);
-    heroEquipments[currentEditingHero] = { 
-        set: document.getElementById('eqSet').value, 
-        mainOpt: document.getElementById('eqMain').value, 
-        accMain: document.getElementById('eqAccMain').value, 
-        accSub: document.getElementById('eqAccSub').value, 
-        detail: document.getElementById('eqDetail').value,
-        ex: exValues 
-    };
+    heroEquipments[currentEditingHero] = { set: document.getElementById('eqSet').value, mainOpt: document.getElementById('eqMain').value, accMain: document.getElementById('eqAccMain').value, accSub: document.getElementById('eqAccSub').value, detail: document.getElementById('eqDetail').value, ex: exValues };
     closeEquipModal(); const tempDeck = { formation: document.getElementById('formationType').value, slots: boardSlots, pet: currentSelectedPet, equips: heroEquipments };
-    renderReadonlyBoard('detailInputHeroBoard', 'detailInputPetSlot', tempDeck, true, builderMode.startsWith('castle'));
+    renderReadonlyBoard('detailInputHeroBoard', 'detailInputPetSlot', tempDeck, true, builderMode.startsWith('castle') || builderMode.startsWith('raid'));
 }
 
 function saveDeck() {
-    if (builderMode.startsWith('castle')) {
-        const deckDesc = document.getElementById('deckDescInput').value.trim();
-        const speedOrder = document.getElementById('deckSpeedOrderInput').value.trim(); 
-        if(builderMode === 'castle_edit') {
-            const deck = mockCastleDecks.find(d => d.day === currentCastleDay);
+    const deckName = document.getElementById('deckNameInput').value.trim() || '이름 없는 빌드';
+    const deckDesc = document.getElementById('deckDescInput').value.trim();
+    const speedOrder = document.getElementById('deckSpeedOrderInput').value.trim(); 
+    
+    if (builderMode.startsWith('raid')) {
+        saveCurrentRaidRound();
+        if (builderMode === 'raid_edit') {
+            const deck = mockRaidDecks.find(d => d.id === currentTargetDeckId);
             if(deck) {
-                deck.desc = deckDesc; deck.speedOrder = speedOrder; 
-                deck.formation = document.getElementById('formationType').value; deck.slots = [...boardSlots]; deck.pet = currentSelectedPet; deck.equips = JSON.parse(JSON.stringify(heroEquipments)); deck.skills = [...skillQueue];
-                alert(`✅ ${dayNames[currentCastleDay]}요일 공성전 빌드가 수정되었습니다!`);
+                deck.name = deckName; deck.desc = deckDesc;
+                deck.r1 = JSON.parse(JSON.stringify(raidDataBuffer[1])); 
+                deck.r2 = JSON.parse(JSON.stringify(raidDataBuffer[2]));
+                deck.r1.speedOrder = document.getElementById('raidSpeed1').value.trim();
+                deck.r2.speedOrder = document.getElementById('raidSpeed2').value.trim();
+                delete deck.skills; // 💡 기존의 통합된 스킬 데이터는 더 이상 쓰지 않도록 지웁니다.
+                alert(`✅ 강림원정대 빌드가 수정되었습니다!`);
             }
         } else {
-            mockCastleDecks.push({ id: Date.now(), day: currentCastleDay, desc: deckDesc, speedOrder: speedOrder, formation: document.getElementById('formationType').value, slots: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname });
-            alert(`✅ ${dayNames[currentCastleDay]}요일 공성전 빌드가 등록되었습니다!`);
+            const newR1 = JSON.parse(JSON.stringify(raidDataBuffer[1]));
+            const newR2 = JSON.parse(JSON.stringify(raidDataBuffer[2]));
+            newR1.speedOrder = document.getElementById('raidSpeed1').value.trim();
+            newR2.speedOrder = document.getElementById('raidSpeed2').value.trim();
+            mockRaidDecks.push({ 
+                id: Date.now(), boss: currentRaidBoss, name: deckName, desc: deckDesc, 
+                r1: newR1, r2: newR2, 
+                authorId: currentUser.id, authorNick: currentUser.nickname 
+            });
+            alert(`✅ 강림원정대 빌드가 등록되었습니다!`);
+        }
+        saveDecksDB(); toggleView('raidView'); renderRaidTab(currentRaidBoss); return;
+    }
+
+    if (builderMode.startsWith('castle')) {
+        if(builderMode === 'castle_edit') {
+            const deck = mockCastleDecks.find(d => d.day === currentCastleDay);
+            if(deck) { deck.desc = deckDesc; deck.speedOrder = speedOrder; deck.formation = document.getElementById('formationType').value; deck.slots = [...boardSlots]; deck.pet = currentSelectedPet; deck.equips = JSON.parse(JSON.stringify(heroEquipments)); deck.skills = [...skillQueue]; alert(`✅ ${dayNames[currentCastleDay]}요일 공성전 빌드가 수정되었습니다!`); }
+        } else {
+            mockCastleDecks.push({ id: Date.now(), day: currentCastleDay, desc: deckDesc, speedOrder: speedOrder, formation: document.getElementById('formationType').value, slots: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname }); alert(`✅ ${dayNames[currentCastleDay]}요일 공성전 빌드가 등록되었습니다!`);
         }
         saveDecksDB(); toggleView('castleView'); renderCastleTab(currentCastleDay); return;
     }
@@ -750,22 +1006,19 @@ function saveDeck() {
     if (builderMode.startsWith('attack_target')) {
         const targetName = document.getElementById('attackDeckNameInput').value.trim();
         if(!targetName) return alert('적 방어 덱 이름을 입력해주세요.'); if(boardSlots.filter(h => h !== null).length === 0) return alert("🚨 최소 1명 이상의 영웅을 배치해주세요.");
-        if (builderMode === 'attack_target_edit') {
-            const target = mockAttackDecks.find(d => d.id === currentTargetDeckId);
-            target.targetName = targetName; target.formation = document.getElementById('formationType').value; target.targetHeroes = [...boardSlots]; target.targetPet = currentSelectedPet;
-            alert(`✅ '${targetName}' 덱이 성공적으로 수정되었습니다!`);
-        } else { mockAttackDecks.push({ id: Date.now(), targetName: targetName, formation: document.getElementById('formationType').value, targetHeroes: [...boardSlots], targetPet: currentSelectedPet, counters: [], authorId: currentUser.id, authorNick: currentUser.nickname }); alert(`✅ 적 방어 덱 '${targetName}'이(가) 등록되었습니다!`); }
+        if (builderMode === 'attack_target_edit') { const target = mockAttackDecks.find(d => d.id === currentTargetDeckId); target.targetName = targetName; target.formation = document.getElementById('formationType').value; target.targetHeroes = [...boardSlots]; target.targetPet = currentSelectedPet; alert(`✅ '${targetName}' 덱이 성공적으로 수정되었습니다!`); } 
+        else { mockAttackDecks.push({ id: Date.now(), targetName: targetName, formation: document.getElementById('formationType').value, targetHeroes: [...boardSlots], targetPet: currentSelectedPet, counters: [], authorId: currentUser.id, authorNick: currentUser.nickname }); alert(`✅ 적 방어 덱 '${targetName}'이(가) 등록되었습니다!`); }
         saveDecksDB(); toggleView('mainListView'); return;
     }
 
     if (builderMode.startsWith('attack_counter')) {
-        const target = mockAttackDecks.find(d => d.id === currentTargetDeckId); const deckDesc = document.getElementById('deckDescInput').value.trim();
+        const target = mockAttackDecks.find(d => d.id === currentTargetDeckId);
         if (builderMode === 'attack_counter_edit') { const counter = target.counters.find(c => c.id === currentCounterDeckId); counter.desc = deckDesc; counter.formation = document.getElementById('formationType').value; counter.heroes = [...boardSlots]; counter.pet = currentSelectedPet; counter.equips = JSON.parse(JSON.stringify(heroEquipments)); counter.skills = [...skillQueue]; alert(`✅ 카운터 덱이 성공적으로 수정되었습니다!`); } 
         else { target.counters.push({ id: Date.now(), desc: deckDesc, formation: document.getElementById('formationType').value, heroes: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname, wins: 0, losses: 0, createdAt: Date.now(), votes: {} }); alert(`✅ 카운터 덱이 성공적으로 등록되었습니다!`); }
         saveDecksDB(); toggleView('mainListView'); return;
     }
 
-    const deckName = document.getElementById('deckNameInput').value.trim() || '이름 없는 방어 덱'; const deckDesc = document.getElementById('deckDescInput').value.trim(); const deckConcept = document.getElementById('deckConceptSelect').value;
+    const deckConcept = document.getElementById('deckConceptSelect').value;
     if(builderMode === 'defense_edit' && viewingDeck) { viewingDeck.name = deckName; viewingDeck.desc = deckDesc; viewingDeck.concept = deckConcept; viewingDeck.formation = document.getElementById('formationType').value; viewingDeck.slots = [...boardSlots]; viewingDeck.pet = currentSelectedPet; viewingDeck.equips = JSON.parse(JSON.stringify(heroEquipments)); viewingDeck.skills = [...skillQueue]; alert(`✅ '${deckName}' 덱이 성공적으로 수정되었습니다!`); } 
     else { mockDefenseDecks.push({ id: Date.now(), name: deckName, desc: deckDesc, concept: deckConcept, formation: document.getElementById('formationType').value, slots: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname }); alert(`✅ '${deckName}' 덱이 성공적으로 추가되었습니다!`); }
     saveDecksDB(); toggleView('mainListView');
