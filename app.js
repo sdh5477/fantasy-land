@@ -174,6 +174,15 @@ function enterMenu(menu) {
     else alert('해당 메뉴는 준비 중입니다!');
 }
 
+// 💡 길드원 명단 페이징 변수
+let currentUserPage = 1;
+const usersPerPage = 10;
+
+function changeUserPage(delta) {
+    currentUserPage += delta;
+    renderAdminView();
+}
+
 function renderAdminView() {
     if(!currentUser || !['admin', 'master'].includes(currentUser.role)) { alert('접근 권한이 없습니다.'); toggleView('homeView'); return; }
     const pendingTbody = document.querySelector('#pendingUsersTable tbody'); const approvedTbody = document.querySelector('#approvedUsersTable tbody');
@@ -203,7 +212,16 @@ function renderAdminView() {
         }
     });
 
-    approvedUsers.forEach(u => {
+    // 💡 페이징 처리 로직 추가
+    const totalPages = Math.ceil(approvedUsers.length / usersPerPage) || 1;
+    if (currentUserPage < 1) currentUserPage = 1;
+    if (currentUserPage > totalPages) currentUserPage = totalPages;
+
+    const startIndex = (currentUserPage - 1) * usersPerPage;
+    const endIndex = startIndex + usersPerPage;
+    const pageUsers = approvedUsers.slice(startIndex, endIndex);
+
+    pageUsers.forEach(u => {
         let roleDisplay = '';
         if (currentUser.role === 'admin') { 
             roleDisplay = `<select onchange="adminAction('${u.id}', 'changeRole', this.value)" style="padding: 3px; font-size: 12px; outline: none; border: 1px solid #bdc3c7;"><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>관리자</option><option value="master" ${u.role === 'master' ? 'selected' : ''}>길드장</option><option value="elite" ${u.role === 'elite' ? 'selected' : ''}>정예 길드원</option><option value="user" ${u.role === 'user' ? 'selected' : ''}>길드원</option></select>`; 
@@ -230,6 +248,18 @@ function renderAdminView() {
 
     if(pendingTbody.innerHTML === '') pendingTbody.innerHTML = '<tr><td colspan="4">대기 중인 인원이 없습니다.</td></tr>';
     if(approvedTbody.innerHTML === '') approvedTbody.innerHTML = '<tr><td colspan="4">관리 가능한 길드원이 없습니다.</td></tr>';
+
+    // 💡 페이징 컨트롤 화면 업데이트
+    const prevBtn = document.getElementById('userPrevBtn');
+    const nextBtn = document.getElementById('userNextBtn');
+    const pageInfo = document.getElementById('userPageInfo');
+    
+    if (prevBtn && nextBtn && pageInfo) {
+        pageInfo.innerText = `${currentUserPage} / ${totalPages}`;
+        pageInfo.style.display = approvedUsers.length > 0 ? 'inline-block' : 'none';
+        prevBtn.style.display = currentUserPage > 1 ? 'inline-block' : 'none';
+        nextBtn.style.display = currentUserPage < totalPages ? 'inline-block' : 'none';
+    }
 }
 
 function adminAction(userId, action, extraValue) {

@@ -51,7 +51,7 @@
     
     <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 40px; border-bottom: 2px solid #2980b9; padding-bottom: 5px;">
         <h3 style="color: #2980b9; margin: 0;">🛡️ 현재 길드원 명단</h3>
-        <select id="userSortSelect" onchange="renderAdminView()" style="padding: 5px; border-radius: 5px; border: 1px solid #bdc3c7; outline: none; font-size: 13px;">
+        <select id="userSortSelect" onchange="currentUserPage=1; renderAdminView()" style="padding: 5px; border-radius: 5px; border: 1px solid #bdc3c7; outline: none; font-size: 13px;">
             <option value="join_asc">가입순 ▲</option>
             <option value="join_desc">가입순 ▼</option>
             <option value="name_asc">닉네임 가나다순 ▲</option>
@@ -61,6 +61,12 @@
         </select>
     </div>
     <table class="admin-table" id="approvedUsersTable"><thead><tr><th>아이디</th><th>닉네임</th><th>권한 상태</th><th>관리</th></tr></thead><tbody></tbody></table>
+    
+    <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px; margin-bottom: 20px;">
+        <button class="btn-sm" id="userPrevBtn" onclick="changeUserPage(-1)" style="background:#34495e; margin:0; display:none;">◀ 이전</button>
+        <span id="userPageInfo" style="font-size: 13px; font-weight: bold; color: #2c3e50; display:none;">1 / 1</span>
+        <button class="btn-sm" id="userNextBtn" onclick="changeUserPage(1)" style="background:#34495e; margin:0; display:none;">다음 ▶</button>
+    </div>
 </div>
 
 <div class="container" id="castleView">
