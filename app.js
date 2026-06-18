@@ -880,9 +880,21 @@ function renderAvailableSkills() {
     
     let html = '';
     heroes.forEach(h => {
-        html += `<div style="display: flex; flex-direction: column; gap: 8px;">`;
+        // 버튼 높낮이 정렬을 위해 justify-content: flex-end 추가
+        html += `<div style="display: flex; flex-direction: column; gap: 8px; justify-content: flex-end;">`;
+        
+        // 💡 쥬피일 경우 변환 스킬(1-1) 버튼 추가
+        if (h === '쥬피') {
+            html += `<button class="skill-btn" style="background-color: #8e44ad;" onclick="addSkill('${h}', '1-1')">${h} 스킬 1-1</button>`;
+        }
+        
         html += `<button class="skill-btn" style="background-color: #2980b9;" onclick="addSkill('${h}', 2)">${h} 스킬 2</button>`;
-        if (h === '세인') { html += `<div style="height: 31px;"></div>`; } else { html += `<button class="skill-btn" style="background-color: #34495e;" onclick="addSkill('${h}', 1)">${h} 스킬 1</button>`; }
+        
+        if (h === '세인') { 
+            html += `<div style="height: 31px;"></div>`; 
+        } else { 
+            html += `<button class="skill-btn" style="background-color: #34495e;" onclick="addSkill('${h}', 1)">${h} 스킬 1</button>`; 
+        }
         html += `</div>`;
     });
     container.innerHTML = html; renderSkillQueue();
