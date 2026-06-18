@@ -782,6 +782,13 @@ function openDeckBuilder(mode, targetId = null, counterId = null, dayIdx = null,
             }
         } else if (mode.startsWith('attack_counter')) {
             if(nTabs) nTabs.style.display = 'flex'; if(builderTitle) builderTitle.innerText = mode === 'attack_counter_edit' ? '🛠️ 카운터 덱 수정' : '🛠️ 카운터 덱 등록';
+            
+            // 💡 FIX: 리스트 뷰에서 바로 수정을 눌렀을 때 타겟과 카운터 덱 정보를 강제로 찾아오도록 추가
+            if (mode === 'attack_counter_edit' && !viewingDeck) {
+                const target = mockAttackDecks.find(d => d.id === targetId);
+                if (target) viewingDeck = target.counters.find(c => c.id === counterId);
+            }
+
             if (mode === 'attack_counter_edit' && viewingDeck) { 
                 document.getElementById('formationType').value = viewingDeck.formation || 'basic'; boardSlots = [...(viewingDeck.heroes || [])]; currentSelectedPet = viewingDeck.pet; 
                 document.getElementById('deckDescInput').value = viewingDeck.desc || ''; heroEquipments = JSON.parse(JSON.stringify(viewingDeck.equips || {})); 
