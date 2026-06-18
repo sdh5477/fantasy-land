@@ -109,7 +109,7 @@ function resetBuilderState() {
 
 function getMiniHeroHTML(name, type="hero") {
     const folder = type === "pet" ? "pets" : "heroes";
-    return `<img src="./images/${folder}/${name}.png" class="mini-hero" title="${name}" onerror="this.src='https://via.placeholder.com/40/cccccc/ffffff?text=${name.charAt(0)}'">`;
+    return `<img loading="lazy" src="./images/${folder}/${name}.png" class="mini-hero" title="${name}" onerror="this.src='https://via.placeholder.com/40/cccccc/ffffff?text=${name.charAt(0)}'">`;
 }
 function getRoleName(role) { switch(role) { case 'admin': return '관리자'; case 'master': return '길드장'; case 'elite': return '정예 길드원'; case 'user': return '길드원'; default: return '길드원'; } }
 function getConceptClass(concept) { if(concept === '속공') return 'concept-sokgong'; if(concept === '속내실') return 'concept-soknaesil'; if(concept === '내실') return 'concept-naesil'; return 'concept-none'; }
@@ -365,9 +365,8 @@ function renderCastleTab(dayIdx) {
                     let hero = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : '');
                     let skillNum = s.skillNum || (typeof s === 'string' ? s.split(' 스킬 ')[1] : '');
                     let round = s.round || 1;
-                    // 💡 라벨 치환 로직 추가
                     let displayLabel = String(skillNum) === '3' ? '각성 스킬' : (String(skillNum).includes('-') ? `스킬 ${String(skillNum).split('-')[0]}` : `스킬 ${skillNum}`);
-                    skillsHtml += `<div class="skill-slot filled round-${round} castle-slot" style="cursor:default;" title="${hero} 스킬 ${skillNum}"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
+                    skillsHtml += `<div class="skill-slot filled round-${round} castle-slot" style="cursor:default;" title="${hero} 스킬 ${skillNum}"><img loading="lazy" src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
                 } else { skillsHtml += `<div class="skill-slot empty castle-slot" style="cursor:default;"></div>`; }
             });
         } else { skillsHtml += '<div style="grid-column: span 10; color:#7f8c8d; font-size:14px; padding: 20px; text-align:center;">설정된 스킬 순서가 없습니다.</div>'; }
@@ -415,7 +414,6 @@ function renderRaidTab(bossName) {
     const contentDiv = document.getElementById('raidListContent');
     contentDiv.innerHTML = '';
 
-    // 💡 작성 권한 연동 (기존 raid에서 raidAdd로 변경)
     document.getElementById('raidAddDeckBtn').style.display = hasPerm('raidAdd') ? 'block' : 'none';
 
     const decks = mockRaidDecks.filter(d => d.boss === bossName);
@@ -460,14 +458,12 @@ function switchMainTab(tabType) {
         document.getElementById('sortWinRateBtn').className = attackSortMode === 'winrate' ? 'sort-btn active' : 'sort-btn';
         document.getElementById('sortLatestBtn').className = attackSortMode === 'latest' ? 'sort-btn active' : 'sort-btn';
         
-        // 💡 적 방어 덱 작성 권한
         addBtn.style.display = hasPerm('gwTargetAdd') ? 'block' : 'none'; 
         addBtn.innerText = '+ 적 방어 덱 등록하기';
         let html = '';
         
         mockAttackDecks.forEach(deck => {
             const targetHtml = (deck.targetHeroes || []).filter(h=>h).map(h => getMiniHeroHTML(h)).join('');
-            // 💡 본인 글이거나 관리 권한이 있으면 수정/삭제 가능
             const canEditTarget = hasPerm('gwTargetManage') || (currentUser && deck.authorId === currentUser.id);
             let targetEditHtml = canEditTarget ? `<div style="text-align: right; margin-bottom: 10px;"><button class="btn-sm" style="background:#f39c12;" onclick="event.stopPropagation(); openDeckBuilder('attack_target_edit', ${deck.id})">수정</button><button class="btn-sm" style="background:#e74c3c;" onclick="event.stopPropagation(); deleteAttackTarget(${deck.id})">삭제</button></div>` : '';
 
@@ -477,7 +473,6 @@ function switchMainTab(tabType) {
             } else { sortedCounters.sort((a, b) => b.createdAt - a.createdAt); }
 
             let counterHtml = sortedCounters.map(c => {
-                // 💡 본인 글이거나 카운터 덱 관리 권한이 있으면 수정/삭제 가능
                 const canEditCounter = hasPerm('gwCounterManage') || (currentUser && c.authorId === currentUser.id);
                 let counterEditHtml = canEditCounter ? `<button class="btn-sm" style="background:#f39c12;" onclick="event.stopPropagation(); openDeckBuilder('attack_counter_edit', ${deck.id}, ${c.id})">수정</button><button class="btn-sm" style="background:#e74c3c;" onclick="event.stopPropagation(); deleteCounterDeck(${deck.id}, ${c.id})">삭제</button>` : '';
                 
@@ -503,7 +498,6 @@ function switchMainTab(tabType) {
             }).join('');
             if(sortedCounters.length === 0) counterHtml = `<div style="text-align:center; color:#7f8c8d; font-size:13px; padding: 10px;">아직 등록된 카운터 덱이 없습니다.</div>`;
             
-            // 💡 카운터 덱 작성 권한 연동
             let addCounterBtn = (currentUser && hasPerm('gwCounterAdd')) ? `<button class="btn" style="width:100%; margin-top:15px; background:#2ecc71; color:white;" onclick="event.stopPropagation(); openDeckBuilder('attack_counter_new', ${deck.id})">+ 카운터 덱 추가하기</button>` : '';
             const isOpenClass = openAccordionIds.includes(deck.id) ? 'open' : '';
             html += `<div class="deck-card ${isOpenClass}"><div class="deck-card-header" onclick="toggleAccordion(${deck.id}, this)"><div><span style="font-size:12px; color:#7f8c8d; font-weight:normal;">적 방어 덱</span><br><span style="color:#e74c3c;">${deck.targetName}</span></div><div style="display:flex; align-items:center; gap:10px;"><div class="mini-hero-list">${targetHtml}</div><span>▼</span></div></div><div class="deck-card-body" onclick="event.stopPropagation()">${targetEditHtml}<hr style="border:0; border-top:1px dashed #ddd; margin:15px 0;">${counterHtml}${addCounterBtn}</div></div>`;
@@ -512,13 +506,12 @@ function switchMainTab(tabType) {
     } else {
         document.getElementById('tab-defense').classList.add('active'); sortContainer.style.display = 'none'; 
         
-        // 💡 방어 추천 덱 작성 권한 연동
         addBtn.style.display = hasPerm('gwDefenseAdd') ? 'block' : 'none'; 
         addBtn.innerText = '+ 방어 추천 덱 추가하기';
         
         mockDefenseDecks.forEach(deck => {
-            const heroHtml = (deck.slots || []).filter(h => h).map(h => `<img src="./images/heroes/${h}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">`).join('');
-            const conceptClass = getConceptClass(deck.concept); const petHtml = deck.pet ? `<img src="./images/pets/${deck.pet}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">` : '';
+            const heroHtml = (deck.slots || []).filter(h => h).map(h => `<img loading="lazy" src="./images/heroes/${h}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">`).join('');
+            const conceptClass = getConceptClass(deck.concept); const petHtml = deck.pet ? `<img loading="lazy" src="./images/pets/${deck.pet}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">` : '';
             content.innerHTML += `<div class="defense-deck" onclick="viewDeckDetail('defense', ${deck.id})"><div><div style="font-weight: bold; color: #2980b9; margin-bottom: 5px;">${deck.name || '이름 없는 방어 덱'} <span class="badge-concept ${conceptClass}" style="font-size:10px;">${deck.concept !== '상관없음' ? deck.concept : ''}</span></div><div style="font-size: 13px; color: #555;">💡 ${deck.desc || '설명이 없습니다.'}</div></div><div class="mini-hero-list">${heroHtml} <span style="font-size: 18px; margin: 0 5px;">+</span> ${petHtml}</div></div>`;
         });
         if(mockDefenseDecks.length === 0) content.innerHTML = '<p style="text-align:center; padding: 20px; color: #7f8c8d;">등록된 방어 덱이 없습니다.</p>';
@@ -550,9 +543,8 @@ function viewDeckDetail(type, id1, id2) {
             if(skillsArr.length > 0) {
                 skillsArr.forEach(s => {
                     let hero = s.hero; let skillNum = s.skillNum;
-                    // 💡 라벨 치환 로직 추가
                     let displayLabel = String(skillNum) === '3' ? '각성 스킬' : (String(skillNum).includes('-') ? `스킬 ${String(skillNum).split('-')[0]}` : `스킬 ${skillNum}`);
-                    html += `<div class="skill-slot filled castle-slot" style="cursor:default;"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
+                    html += `<div class="skill-slot filled castle-slot" style="cursor:default;"><img loading="lazy" src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
                 });
             } else { html += '<div style="width:100%; text-align:center; color:#7f8c8d; font-size:13px; padding:10px;">설정된 스킬 순서가 없습니다.</div>'; }
             html += '</div>';
@@ -615,9 +607,8 @@ function viewDeckDetail(type, id1, id2) {
             viewingDeck.skills.forEach(s => {
                 if (s !== null) {
                     let hero = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : ''); let skillNum = s.skillNum || (typeof s === 'string' ? s.split(' 스킬 ')[1] : '');
-                    // 💡 라벨 치환 로직 추가
                     let displayLabel = String(skillNum) === '3' ? '각성 스킬' : (String(skillNum).includes('-') ? `스킬 ${String(skillNum).split('-')[0]}` : `스킬 ${skillNum}`);
-                    skillsHtml += `<div class="skill-slot filled" style="cursor:default;" title="${hero} 스킬 ${skillNum}"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
+                    skillsHtml += `<div class="skill-slot filled" style="cursor:default;" title="${hero} 스킬 ${skillNum}"><img loading="lazy" src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
                 } else { skillsHtml += `<div class="skill-slot empty" style="cursor:default;"></div>`; }
             });
         } else { skillsHtml = '<div style="color:#7f8c8d; font-size:14px; padding: 20px; width:100%; text-align:center;">설정된 스킬 순서가 없습니다.</div>'; }
@@ -864,13 +855,13 @@ function renderReadonlyBoard(boardId, petId, deckData, isEditMode = false, isCas
         for(let i = start; i < end; i++) {
             const h = slotsData[i]; const eqClass = (deckData.equips && deckData.equips[h]) ? 'has-equip' : ''; let roleStr = ''; if(h) { const heroInfo = heroData.find(x => x.name === h); if(heroInfo) roleStr = heroInfo.role; }
             const bColor = getRoleColor(roleStr);
-            if(h) { html += `<div class="hero-slot filled ${eqClass}" style="border-color: ${bColor};" onclick="openEquipModal('${h}', ${!isEditMode})"><img src="./images/heroes/${h}.png" onerror="this.src='https://via.placeholder.com/75'"><div class="equip-badge">E</div></div>`; } 
+            if(h) { html += `<div class="hero-slot filled ${eqClass}" style="border-color: ${bColor};" onclick="openEquipModal('${h}', ${!isEditMode})"><img loading="lazy" src="./images/heroes/${h}.png" onerror="this.src='https://via.placeholder.com/75'"><div class="equip-badge">E</div></div>`; } 
             else { html += `<div class="hero-slot">빈자리</div>`; }
         }
         html += '</div>';
     });
     boardEl.innerHTML = html;
-    const p = deckData.pet; document.getElementById(petId).innerHTML = p ? `<img src="./images/pets/${p}.png" onerror="this.src='https://via.placeholder.com/80'">` : '펫 없음';
+    const p = deckData.pet; document.getElementById(petId).innerHTML = p ? `<img loading="lazy" src="./images/pets/${p}.png" onerror="this.src='https://via.placeholder.com/80'">` : '펫 없음';
 }
 
 function renderAvailableSkills() {
@@ -895,26 +886,22 @@ function renderAvailableSkills() {
         } 
     }
     
-    // 💡 각성 스킬을 보유한 영웅 목록
     const awakeningHeroes = ['델론즈', '실베스타', '스쿨드', '클레미스'];
     
     let html = '';
     heroes.forEach(h => {
         html += `<div style="display: flex; flex-direction: column; gap: 8px; justify-content: flex-end;">`;
         
-        // 💡 각성 영웅일 경우 스킬 3 버튼 추가 (버튼 텍스트는 '각성 스킬'로 노출)
         if (awakeningHeroes.includes(h)) {
             html += `<button class="skill-btn" style="background-color: #d35400;" onclick="addSkill('${h}', 3)">${h} 각성 스킬</button>`;
         }
 
-        // 💡 쥬피일 경우 변환 스킬(1-1) 버튼 추가
         if (h === '쥬피') {
             html += `<button class="skill-btn" style="background-color: #8e44ad;" onclick="addSkill('${h}', '1-1')">${h} 스킬 1-1</button>`;
         }
         
         html += `<button class="skill-btn" style="background-color: #2980b9;" onclick="addSkill('${h}', 2)">${h} 스킬 2</button>`;
         
-        // 💡 세인과 발리스타는 스킬 1이 없으므로 빈 공간 처리
         if (h === '세인' || h === '발리스타') { 
             html += `<div style="height: 31px;"></div>`; 
         } else { 
@@ -948,9 +935,8 @@ function renderSkillQueue() {
         queueDiv.className = 'skill-grid-flex'; let html = '';
         for (let i = 0; i < skillQueue.length; i++) {
             const s = skillQueue[i]; let hero = s.hero; let skillNum = s.skillNum;
-            // 💡 라벨 치환 로직 추가
             let displayLabel = String(skillNum) === '3' ? '각성 스킬' : (String(skillNum).includes('-') ? `스킬 ${String(skillNum).split('-')[0]}` : `스킬 ${skillNum}`);
-            html += `<div class="skill-slot filled castle-slot" onclick="removeSkill(${i})" title="${hero} 스킬 ${skillNum} (클릭 시 취소)"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
+            html += `<div class="skill-slot filled castle-slot" onclick="removeSkill(${i})" title="${hero} 스킬 ${skillNum} (클릭 시 취소)"><img loading="lazy" src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
         }
         queueDiv.innerHTML = html;
     } else {
@@ -961,9 +947,8 @@ function renderSkillQueue() {
             if (s !== null && s !== undefined) { 
                 let hero = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : ''); let skillNum = s.skillNum || (typeof s === 'string' ? s.split(' 스킬 ')[1] : ''); let round = s.round || 1;
                 let roundClass = builderMode.startsWith('castle') ? `round-${round}` : ''; let slotClass = builderMode.startsWith('castle') ? 'castle-slot' : '';
-                // 💡 라벨 치환 로직 추가
                 let displayLabel = String(skillNum) === '3' ? '각성 스킬' : (String(skillNum).includes('-') ? `스킬 ${String(skillNum).split('-')[0]}` : `스킬 ${skillNum}`);
-                html += `<div class="skill-slot filled ${roundClass} ${slotClass}" onclick="removeSkill(${i})" title="${hero} 스킬 ${skillNum} (클릭 시 취소)"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
+                html += `<div class="skill-slot filled ${roundClass} ${slotClass}" onclick="removeSkill(${i})" title="${hero} 스킬 ${skillNum} (클릭 시 취소)"><img loading="lazy" src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
             } else { let slotClass = builderMode.startsWith('castle') ? 'castle-slot' : ''; html += `<div class="skill-slot empty ${slotClass}" onclick="removeSkill(${i})"><span style="color:#bdc3c7; font-weight:900;">${i+1}</span></div>`; }
         }
         queueDiv.innerHTML = html;
@@ -1006,13 +991,13 @@ function renderBuilderBoard() {
             const h = boardSlots[i]; const isActive = (i === activeSlotIndex && !h && activeSlotType === 'hero') ? 'active-slot' : '';
             let roleStr = ''; if(h) { const heroInfo = heroData.find(x => x.name === h); if(heroInfo) roleStr = heroInfo.role; }
             const bColor = getRoleColor(roleStr);
-            html += h ? `<div class="hero-slot filled" style="border-color: ${bColor};" onclick="clickSlot(${i})"><img src="./images/heroes/${h}.png" onerror="this.src='https://via.placeholder.com/75'"></div>` : `<div class="hero-slot ${isActive}" onclick="clickSlot(${i})"><span style="color:${isActive?'#c0392b':'#7f8c8d'};">선택</span></div>`;
+            html += h ? `<div class="hero-slot filled" style="border-color: ${bColor};" onclick="clickSlot(${i})"><img loading="lazy" src="./images/heroes/${h}.png" onerror="this.src='https://via.placeholder.com/75'"></div>` : `<div class="hero-slot ${isActive}" onclick="clickSlot(${i})"><span style="color:${isActive?'#c0392b':'#7f8c8d'};">선택</span></div>`;
         }
         html += '</div>';
     });
     boardEl.innerHTML = html;
     const pSlot = document.getElementById('builderPetSlot');
-    if (currentSelectedPet) { pSlot.className = 'pet-slot filled'; pSlot.innerHTML = `<img src="./images/pets/${currentSelectedPet}.png" onerror="this.src='https://via.placeholder.com/80'">`; } 
+    if (currentSelectedPet) { pSlot.className = 'pet-slot filled'; pSlot.innerHTML = `<img loading="lazy" src="./images/pets/${currentSelectedPet}.png" onerror="this.src='https://via.placeholder.com/80'">`; } 
     else { pSlot.className = `pet-slot ${activeSlotType === 'pet' ? 'active-slot' : ''}`; pSlot.innerHTML = `<div class="pet-slot-title">펫 슬롯</div>`; }
 }
 
@@ -1023,11 +1008,11 @@ function applyFilters() {
         const sortType = document.getElementById('sortSelect').value, filterRarity = document.getElementById('raritySelect').value, filterRole = document.getElementById('roleSelect').value;
         let filtered = heroData.filter(c => c.name.toLowerCase().includes(searchText) && (filterRarity==='all'||c.rarity===filterRarity) && (filterRole==='all'||c.role===filterRole));
         filtered.sort((a,b) => sortType==='rarity' ? (rarityRank[a.rarity]-rarityRank[b.rarity] || a.name.localeCompare(b.name)) : a.name.localeCompare(b.name));
-        filtered.forEach(c => { pool.innerHTML += `<div class="char-card" onclick="selectHero('${c.name}')"><div class="badge badge-${c.rarity}">${c.rarity}</div><img src="./images/heroes/${c.name}.png" onerror="this.src='https://via.placeholder.com/60'"><div class="char-name">${c.name}</div></div>`; });
+        filtered.forEach(c => { pool.innerHTML += `<div class="char-card" onclick="selectHero('${c.name}')"><div class="badge badge-${c.rarity}">${c.rarity}</div><img loading="lazy" src="./images/heroes/${c.name}.png" onerror="this.src='https://via.placeholder.com/60'"><div class="char-name">${c.name}</div></div>`; });
     } else {
         document.getElementById('raritySelect').style.display = 'none'; document.getElementById('roleSelect').style.display = 'none';
         let filtered = petData.filter(p => p.name.toLowerCase().includes(searchText)).sort((a,b)=>a.name.localeCompare(b.name));
-        filtered.forEach(p => { pool.innerHTML += `<div class="char-card" onclick="selectPet('${p.name}')"><div class="badge badge-펫">펫</div><img src="./images/pets/${p.name}.png" onerror="this.src='https://via.placeholder.com/60'"><div class="char-name">${p.name}</div></div>`; });
+        filtered.forEach(p => { pool.innerHTML += `<div class="char-card" onclick="selectPet('${p.name}')"><div class="badge badge-펫">펫</div><img loading="lazy" src="./images/pets/${p.name}.png" onerror="this.src='https://via.placeholder.com/60'"><div class="char-name">${p.name}</div></div>`; });
     }
 }
 
@@ -1143,7 +1128,7 @@ function logActivity(actionDesc) { if (!currentUser) return; const logEntry = { 
 
 async function viewUserLogs(userId) {
     const user = usersDB.find(u => u.id === userId); if (!user) return;
-    if (roleWeight[currentUser.role] < roleWeight[user.role]) { alert('본인보다 높은 권한의 길드원 로그는 확인할 수 없습니다.'); return; }
+    if (roleWeight[currentUser.role] < roleWeight[user.role]) { alert('본인보다 높은 권한의 길드원 로그는 확인할 수 재접속할 수 없습니다.'); return; }
     
     document.getElementById('logModalTitle').innerText = `[${user.nickname}] 님의 활동 로그`;
     const lastLoginDate = user.lastLogin ? new Date(user.lastLogin).toLocaleString() : '기록 없음';
