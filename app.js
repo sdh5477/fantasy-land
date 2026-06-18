@@ -208,7 +208,7 @@ function renderAdminView() {
     
     const permModalBtn = document.getElementById('adminPermModalBtn');
     if (permModalBtn) {
-        permModalBtn.style.display = (currentUser.role === 'admin') ? 'inline-block' : 'none';
+        permModalBtn.style.display = ['admin', 'master'].includes(currentUser.role) ? 'inline-block' : 'none';
     }
 
     const pendingTbody = document.querySelector('#pendingUsersTable tbody'); const approvedTbody = document.querySelector('#approvedUsersTable tbody');
@@ -1135,7 +1135,7 @@ function closeUserLogModal() { document.getElementById('userLogModal').style.dis
 // 💡 시스템 권한 설정 모달 제어 로직
 // ==========================================
 function openPermModal() {
-    if (!currentUser || currentUser.role !== 'admin') return alert('권한이 없습니다.');
+    if (!currentUser || !['admin', 'master'].includes(currentUser.role)) return alert('권한이 없습니다.');
     renderPermSelects();
     document.getElementById('permModal').style.display = 'flex';
 }
@@ -1151,7 +1151,7 @@ function renderPermSelects() {
 }
 
 function savePermConfig() {
-    if (!currentUser || currentUser.role !== 'admin') return alert('권한이 없습니다.');
+    if (!currentUser || !['admin', 'master'].includes(currentUser.role)) return alert('권한이 없습니다.');
     
     const keys = ['castleAdd', 'castleManage', 'gwTargetAdd', 'gwTargetManage', 'gwDefenseAdd', 'gwDefenseManage', 'gwCounterAdd', 'gwCounterManage', 'raidAdd', 'raidManage'];
     keys.forEach(k => {
