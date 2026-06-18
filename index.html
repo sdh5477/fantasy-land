@@ -44,7 +44,11 @@
 
 <div class="container" id="adminView">
     <button class="btn btn-back" onclick="toggleView('homeView')">🔙 메인으로 돌아가기</button>
-    <h2 style="text-align: center; color: #8e44ad;">👑 길드원 관리 시스템</h2>
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 15px;">
+        <h2 style="margin: 0; color: #8e44ad;">👑 길드원 관리 시스템</h2>
+        <button class="btn" id="adminPermModalBtn" onclick="openPermModal()" style="background-color: #e67e22; color: white; display: none; margin: 0; font-size: 14px;">⚙️ 메뉴 권한 설정</button>
+    </div>
     
     <h3 style="color: #e67e22; border-bottom: 2px solid #e67e22; padding-bottom: 5px;">🔔 가입 승인 대기 명단</h3>
     <table class="admin-table" id="pendingUsersTable"><thead><tr><th>아이디</th><th>닉네임</th><th>상태</th><th>관리</th></tr></thead><tbody></tbody></table>
@@ -324,6 +328,60 @@
         
         <div style="text-align: right;">
             <button class="btn" onclick="closeUserLogModal()" style="background: #95a5a6; color: white;">닫기</button>
+        </div>
+    </div>
+</div>
+
+<div id="permModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <h3 style="color: #2c3e50; border-bottom: 2px solid #2c3e50; padding-bottom: 10px; margin-top:0;">⚙️ 메뉴별 세부 권한 설정</h3>
+        <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 15px;">※ 작성자 본인은 설정과 무관하게 항상 자신의 글을 수정/삭제할 수 있습니다.</p>
+
+        <div style="display: flex; flex-direction: column; gap: 15px;">
+            <div style="background: #fafafa; padding: 10px; border-radius: 5px; border: 1px solid #ddd;">
+                <label style="font-weight: bold; color: #2c3e50;">🏰 공성전 빌드</label>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <div style="flex: 1;"><span style="font-size: 11px; color:#555;">➕ 작성 권한</span><select id="permCastleAdd" style="width: 100%; padding: 5px; font-size:12px;"><option value="admin">관리자만</option><option value="master">길드장 이상</option><option value="elite">정예 이상</option><option value="user">모두</option></select></div>
+                    <div style="flex: 1;"><span style="font-size: 11px; color:#e74c3c;">🛠️ 타인 글 수정/삭제</span><select id="permCastleManage" style="width: 100%; padding: 5px; font-size:12px;"><option value="admin">관리자만</option><option value="master">길드장 이상</option><option value="elite">정예 이상</option><option value="user">모두</option></select></div>
+                </div>
+            </div>
+
+            <div style="background: #fafafa; padding: 10px; border-radius: 5px; border: 1px solid #ddd;">
+                <label style="font-weight: bold; color: #2c3e50;">⚔️ 길드전: 적 방어 덱</label>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <div style="flex: 1;"><span style="font-size: 11px; color:#555;">➕ 작성 권한</span><select id="permGwTargetAdd" style="width: 100%; padding: 5px; font-size:12px;"><option value="admin">관리자만</option><option value="master">길드장 이상</option><option value="elite">정예 이상</option><option value="user">모두</option></select></div>
+                    <div style="flex: 1;"><span style="font-size: 11px; color:#e74c3c;">🛠️ 타인 글 수정/삭제</span><select id="permGwTargetManage" style="width: 100%; padding: 5px; font-size:12px;"><option value="admin">관리자만</option><option value="master">길드장 이상</option><option value="elite">정예 이상</option><option value="user">모두</option></select></div>
+                </div>
+            </div>
+
+            <div style="background: #fafafa; padding: 10px; border-radius: 5px; border: 1px solid #ddd;">
+                <label style="font-weight: bold; color: #2c3e50;">🛡️ 길드전: 방어 추천 덱</label>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <div style="flex: 1;"><span style="font-size: 11px; color:#555;">➕ 작성 권한</span><select id="permGwDefenseAdd" style="width: 100%; padding: 5px; font-size:12px;"><option value="admin">관리자만</option><option value="master">길드장 이상</option><option value="elite">정예 이상</option><option value="user">모두</option></select></div>
+                    <div style="flex: 1;"><span style="font-size: 11px; color:#e74c3c;">🛠️ 타인 글 수정/삭제</span><select id="permGwDefenseManage" style="width: 100%; padding: 5px; font-size:12px;"><option value="admin">관리자만</option><option value="master">길드장 이상</option><option value="elite">정예 이상</option><option value="user">모두</option></select></div>
+                </div>
+            </div>
+
+            <div style="background: #fafafa; padding: 10px; border-radius: 5px; border: 1px solid #ddd;">
+                <label style="font-weight: bold; color: #2c3e50;">🔥 길드전: 카운터 덱</label>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <div style="flex: 1;"><span style="font-size: 11px; color:#555;">➕ 작성 권한</span><select id="permGwCounterAdd" style="width: 100%; padding: 5px; font-size:12px;"><option value="admin">관리자만</option><option value="master">길드장 이상</option><option value="elite">정예 이상</option><option value="user">모두</option></select></div>
+                    <div style="flex: 1;"><span style="font-size: 11px; color:#e74c3c;">🛠️ 타인 글 수정/삭제</span><select id="permGwCounterManage" style="width: 100%; padding: 5px; font-size:12px;"><option value="admin">관리자만</option><option value="master">길드장 이상</option><option value="elite">정예 이상</option><option value="user">모두</option></select></div>
+                </div>
+            </div>
+
+            <div style="background: #fafafa; padding: 10px; border-radius: 5px; border: 1px solid #ddd;">
+                <label style="font-weight: bold; color: #2c3e50;">🐉 강림원정대 빌드</label>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <div style="flex: 1;"><span style="font-size: 11px; color:#555;">➕ 작성 권한</span><select id="permRaidAdd" style="width: 100%; padding: 5px; font-size:12px;"><option value="admin">관리자만</option><option value="master">길드장 이상</option><option value="elite">정예 이상</option><option value="user">모두</option></select></div>
+                    <div style="flex: 1;"><span style="font-size: 11px; color:#e74c3c;">🛠️ 타인 글 수정/삭제</span><select id="permRaidManage" style="width: 100%; padding: 5px; font-size:12px;"><option value="admin">관리자만</option><option value="master">길드장 이상</option><option value="elite">정예 이상</option><option value="user">모두</option></select></div>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align: right; margin-top: 20px;">
+            <button class="btn" onclick="closePermModal()" style="background: #95a5a6; color: white;">취소</button>
+            <button class="btn btn-primary" onclick="savePermConfig()">저장 및 적용</button>
         </div>
     </div>
 </div>
