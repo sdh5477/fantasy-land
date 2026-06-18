@@ -355,9 +355,7 @@ function renderCastleTab(dayIdx) {
     const deck = mockCastleDecks.find(d => d.day === dayIdx);
     
     if (deck) {
-        // 💡 작성자이거나 타인글 관리 권한이 있으면 수정/삭제 가능
         const canManageCastle = hasPerm('castleManage') || (currentUser && deck.authorId === currentUser.id);
-        
         let editDeleteBtns = canManageCastle ? `<div style="text-align: right; margin-bottom: 10px;"><button class="btn" style="background-color: #f39c12; color: white; margin-right: 5px;" onclick="openDeckBuilder('castle_edit', null, null, ${dayIdx})">✏️ 수정</button><button class="btn" style="background-color: #e74c3c; color: white;" onclick="deleteCastleDeck(${dayIdx})">🗑️ 삭제</button></div>` : '';
         let boardHtml = `<div class="board-container"><div class="hero-board" id="castleHeroBoard"></div><div class="pet-slot filled" id="castlePetSlot"></div></div>`;
         let skillsHtml = '<div class="skill-grid-20">';
@@ -367,7 +365,9 @@ function renderCastleTab(dayIdx) {
                     let hero = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : '');
                     let skillNum = s.skillNum || (typeof s === 'string' ? s.split(' 스킬 ')[1] : '');
                     let round = s.round || 1;
-                    skillsHtml += `<div class="skill-slot filled round-${round} castle-slot" style="cursor:default;" title="${hero} 스킬 ${skillNum}"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span><div class="skill-text-label">스킬 ${skillNum}</div></div>`;
+                    // 💡 라벨 치환 로직 추가
+                    let displayLabel = String(skillNum) === '3' ? '각성 스킬' : (String(skillNum).includes('-') ? `스킬 ${String(skillNum).split('-')[0]}` : `스킬 ${skillNum}`);
+                    skillsHtml += `<div class="skill-slot filled round-${round} castle-slot" style="cursor:default;" title="${hero} 스킬 ${skillNum}"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
                 } else { skillsHtml += `<div class="skill-slot empty castle-slot" style="cursor:default;"></div>`; }
             });
         } else { skillsHtml += '<div style="grid-column: span 10; color:#7f8c8d; font-size:14px; padding: 20px; text-align:center;">설정된 스킬 순서가 없습니다.</div>'; }
@@ -389,7 +389,6 @@ function renderCastleTab(dayIdx) {
             </div>`;
         viewingDeck = deck; renderReadonlyBoard('castleHeroBoard', 'castlePetSlot', deck, false, true);
     } else {
-        // 💡 작성 권한 검사
         let addBtn = hasPerm('castleAdd') ? `<button class="btn btn-primary" style="width: 100%; margin-top: 15px;" onclick="openDeckBuilder('castle_new', null, null, ${dayIdx})">+ ${dayNames[dayIdx]}요일 공성전 빌드 등록하기</button>` : '';
         contentDiv.innerHTML = `<div style="text-align:center; padding: 40px 20px; background: white; border-radius: 10px; border: 1px dashed #bdc3c7;"><h3 style="color: #7f8c8d; margin-bottom: 10px;">아직 등록된 족보가 없습니다.</h3><p style="font-size: 14px; color: #95a5a6;">권한을 가진 길드원만 등록 가능합니다.</p>${addBtn}</div>`;
     }
@@ -551,7 +550,9 @@ function viewDeckDetail(type, id1, id2) {
             if(skillsArr.length > 0) {
                 skillsArr.forEach(s => {
                     let hero = s.hero; let skillNum = s.skillNum;
-                    html += `<div class="skill-slot filled castle-slot" style="cursor:default;"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span><div class="skill-text-label">스킬 ${skillNum}</div></div>`;
+                    // 💡 라벨 치환 로직 추가
+                    let displayLabel = String(skillNum) === '3' ? '각성 스킬' : (String(skillNum).includes('-') ? `스킬 ${String(skillNum).split('-')[0]}` : `스킬 ${skillNum}`);
+                    html += `<div class="skill-slot filled castle-slot" style="cursor:default;"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
                 });
             } else { html += '<div style="width:100%; text-align:center; color:#7f8c8d; font-size:13px; padding:10px;">설정된 스킬 순서가 없습니다.</div>'; }
             html += '</div>';
@@ -614,7 +615,9 @@ function viewDeckDetail(type, id1, id2) {
             viewingDeck.skills.forEach(s => {
                 if (s !== null) {
                     let hero = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : ''); let skillNum = s.skillNum || (typeof s === 'string' ? s.split(' 스킬 ')[1] : '');
-                    skillsHtml += `<div class="skill-slot filled" style="cursor:default;" title="${hero} 스킬 ${skillNum}"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span><div class="skill-text-label">스킬 ${skillNum}</div></div>`;
+                    // 💡 라벨 치환 로직 추가
+                    let displayLabel = String(skillNum) === '3' ? '각성 스킬' : (String(skillNum).includes('-') ? `스킬 ${String(skillNum).split('-')[0]}` : `스킬 ${skillNum}`);
+                    skillsHtml += `<div class="skill-slot filled" style="cursor:default;" title="${hero} 스킬 ${skillNum}"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
                 } else { skillsHtml += `<div class="skill-slot empty" style="cursor:default;"></div>`; }
             });
         } else { skillsHtml = '<div style="color:#7f8c8d; font-size:14px; padding: 20px; width:100%; text-align:center;">설정된 스킬 순서가 없습니다.</div>'; }
@@ -624,7 +627,6 @@ function viewDeckDetail(type, id1, id2) {
     document.getElementById('detailDeckDesc').innerText = viewingDeck.desc ? `💡 ${viewingDeck.desc}` : '💡 설명이 없습니다.';
     document.getElementById('detailDeckAuthor').innerText = `작성자: ${viewingDeck.authorNick || '알 수 없음'}`;
     
-    // 💡 동적 권한 + 작성자 여부 체크 로직
     let hasPermission = false;
     const isAuthor = currentUser && viewingDeck.authorId === currentUser.id;
     
@@ -875,14 +877,36 @@ function renderAvailableSkills() {
     const container = document.getElementById('availableSkills'); container.innerHTML = '';
     let heroes = boardSlots.filter(h => h !== null);
     
-    if(!builderMode.startsWith('raid')) { for(let i=0; i<skillQueue.length; i++) { let s = skillQueue[i]; if (s !== null) { let heroName = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : ''); if (!heroes.includes(heroName)) skillQueue[i] = null; } } } 
-    else { for(let i = skillQueue.length - 1; i >= 0; i--) { let s = skillQueue[i]; if (s !== null) { let heroName = s.hero; if (!heroes.includes(heroName)) skillQueue.splice(i, 1); } } }
+    if(!builderMode.startsWith('raid')) { 
+        for(let i=0; i<skillQueue.length; i++) { 
+            let s = skillQueue[i]; 
+            if (s !== null) { 
+                let heroName = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : ''); 
+                if (!heroes.includes(heroName)) skillQueue[i] = null; 
+            } 
+        } 
+    } else { 
+        for(let i = skillQueue.length - 1; i >= 0; i--) { 
+            let s = skillQueue[i]; 
+            if (s !== null) { 
+                let heroName = s.hero; 
+                if (!heroes.includes(heroName)) skillQueue.splice(i, 1); 
+            } 
+        } 
+    }
+    
+    // 💡 각성 스킬을 보유한 영웅 목록
+    const awakeningHeroes = ['델론즈', '실베스타', '스쿨드', '클레미스'];
     
     let html = '';
     heroes.forEach(h => {
-        // 버튼 높낮이 정렬을 위해 justify-content: flex-end 추가
         html += `<div style="display: flex; flex-direction: column; gap: 8px; justify-content: flex-end;">`;
         
+        // 💡 각성 영웅일 경우 스킬 3 버튼 추가 (버튼 텍스트는 '각성 스킬'로 노출)
+        if (awakeningHeroes.includes(h)) {
+            html += `<button class="skill-btn" style="background-color: #d35400;" onclick="addSkill('${h}', 3)">${h} 각성 스킬</button>`;
+        }
+
         // 💡 쥬피일 경우 변환 스킬(1-1) 버튼 추가
         if (h === '쥬피') {
             html += `<button class="skill-btn" style="background-color: #8e44ad;" onclick="addSkill('${h}', '1-1')">${h} 스킬 1-1</button>`;
@@ -890,13 +914,15 @@ function renderAvailableSkills() {
         
         html += `<button class="skill-btn" style="background-color: #2980b9;" onclick="addSkill('${h}', 2)">${h} 스킬 2</button>`;
         
-        if (h === '세인') { 
+        // 💡 세인과 발리스타는 스킬 1이 없으므로 빈 공간 처리
+        if (h === '세인' || h === '발리스타') { 
             html += `<div style="height: 31px;"></div>`; 
         } else { 
             html += `<button class="skill-btn" style="background-color: #34495e;" onclick="addSkill('${h}', 1)">${h} 스킬 1</button>`; 
         }
         html += `</div>`;
     });
+    
     container.innerHTML = html; renderSkillQueue();
 }
 
@@ -922,7 +948,9 @@ function renderSkillQueue() {
         queueDiv.className = 'skill-grid-flex'; let html = '';
         for (let i = 0; i < skillQueue.length; i++) {
             const s = skillQueue[i]; let hero = s.hero; let skillNum = s.skillNum;
-            html += `<div class="skill-slot filled castle-slot" onclick="removeSkill(${i})" title="${hero} 스킬 ${skillNum} (클릭 시 취소)"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span><div class="skill-text-label">스킬 ${skillNum}</div></div>`;
+            // 💡 라벨 치환 로직 추가
+            let displayLabel = String(skillNum) === '3' ? '각성 스킬' : (String(skillNum).includes('-') ? `스킬 ${String(skillNum).split('-')[0]}` : `스킬 ${skillNum}`);
+            html += `<div class="skill-slot filled castle-slot" onclick="removeSkill(${i})" title="${hero} 스킬 ${skillNum} (클릭 시 취소)"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
         }
         queueDiv.innerHTML = html;
     } else {
@@ -933,7 +961,9 @@ function renderSkillQueue() {
             if (s !== null && s !== undefined) { 
                 let hero = s.hero || (typeof s === 'string' ? s.split(' 스킬 ')[0] : ''); let skillNum = s.skillNum || (typeof s === 'string' ? s.split(' 스킬 ')[1] : ''); let round = s.round || 1;
                 let roundClass = builderMode.startsWith('castle') ? `round-${round}` : ''; let slotClass = builderMode.startsWith('castle') ? 'castle-slot' : '';
-                html += `<div class="skill-slot filled ${roundClass} ${slotClass}" onclick="removeSkill(${i})" title="${hero} 스킬 ${skillNum} (클릭 시 취소)"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>S${skillNum}</span><div class="skill-text-label">스킬 ${skillNum}</div></div>`;
+                // 💡 라벨 치환 로직 추가
+                let displayLabel = String(skillNum) === '3' ? '각성 스킬' : (String(skillNum).includes('-') ? `스킬 ${String(skillNum).split('-')[0]}` : `스킬 ${skillNum}`);
+                html += `<div class="skill-slot filled ${roundClass} ${slotClass}" onclick="removeSkill(${i})" title="${hero} 스킬 ${skillNum} (클릭 시 취소)"><img src="./images/skills/${hero} 스킬 ${skillNum}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width:100%; height:100%; object-fit:cover; border-radius:5px;"><span class="skill-fallback" style="display:none; font-size:10px; font-weight:bold; color:#333;">${hero}<br>${displayLabel}</span><div class="skill-text-label">${displayLabel}</div></div>`;
             } else { let slotClass = builderMode.startsWith('castle') ? 'castle-slot' : ''; html += `<div class="skill-slot empty ${slotClass}" onclick="removeSkill(${i})"><span style="color:#bdc3c7; font-weight:900;">${i+1}</span></div>`; }
         }
         queueDiv.innerHTML = html;
