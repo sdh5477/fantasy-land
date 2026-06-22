@@ -109,9 +109,24 @@
         <button class="tab-btn" id="tab-defense" onclick="switchMainTab('defense')">🛡️ 방어 추천 덱</button>
     </div>
     
-    <div id="attackSortContainer" style="display: none; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 10px; background: #ecf0f1; border-radius: 8px;">
-        <div style="font-size: 14px; font-weight: bold; color: #2c3e50;">💡 각 방어 덱 하위의 '카운터 덱' 나열 순서</div>
-        <div style="display: flex; gap: 10px;">
+    <div id="gwFilterContainer" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 10px; background: #ecf0f1; border-radius: 8px;">
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <span style="font-size: 14px; font-weight: bold; color: #2c3e50;">🔍 필터:</span>
+            <select id="gwTypeFilter" onchange="switchMainTab(currentMainTab)" style="padding: 5px; border-radius: 5px; border: 1px solid #bdc3c7; outline: none; font-size: 13px;">
+                <option value="all">전체 덱 타입</option>
+                <option value="공덱">⚔️ 공덱</option>
+                <option value="마덱">🪄 마덱</option>
+                <option value="방덱">🛡️ 방덱</option>
+                <option value="만능덱">🌀 만능덱</option>
+            </select>
+            <select id="gwSortFilter" onchange="switchMainTab(currentMainTab)" style="padding: 5px; border-radius: 5px; border: 1px solid #bdc3c7; outline: none; font-size: 13px;">
+                <option value="latest">🕒 최신순</option>
+                <option value="name_asc">🔠 이름 가나다순 ▲</option>
+                <option value="name_desc">🔡 이름 가나다순 ▼</option>
+            </select>
+        </div>
+        <div id="attackSortContainer" style="display: none; gap: 10px; align-items: center;">
+            <span style="font-size: 12px; font-weight: bold; color: #7f8c8d;">카운터 정렬:</span>
             <button id="sortWinRateBtn" class="sort-btn active" onclick="setAttackSortMode('winrate')">🏆 승률순</button>
             <button id="sortLatestBtn" class="sort-btn" onclick="setAttackSortMode('latest')">🕒 최신순</button>
         </div>
@@ -125,6 +140,7 @@
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <button class="btn btn-back" style="margin: 0;" onclick="handleDetailBackBtn()">🔙 리스트로</button>
         <div>
+            <button class="btn" id="recommendDeckBtn" style="background-color: #27ae60; color: white; margin-right: 5px; display: none;" onclick="toggleRecommendDeck()">⭐ 추천 덱 설정</button>
             <button class="btn" id="deleteDeckBtn" style="background-color: #e74c3c; color: white; margin-right: 5px; display: none;" onclick="deleteCurrentDeck()">🗑️ 삭제</button>
             <button class="btn" id="editDeckBtn" style="background-color: #f39c12; color: white; display: none;" onclick="editCurrentDeck()">✏️ 수정</button>
         </div>
@@ -166,7 +182,12 @@
     <div id="builderConfigSection">
         <div id="attackDeckNameContainer" class="formation-control" style="display: none; background: #fdfae6; padding: 15px; border-radius: 8px; border: 1px solid #e74c3c; margin-bottom: 15px;">
             <label style="display: block; margin-bottom: 8px; color: #c0392b;"><strong>🎯 상대 방어 덱 이름 (필수): </strong></label>
-            <input type="text" id="attackDeckNameInput" placeholder="예: 밀스실" style="width: 100%; max-width: 400px; padding: 10px; border-radius: 5px; border: 1px solid #bdc3c7; outline: none; font-size: 16px; font-weight: bold; text-align: center; box-sizing: border-box;">
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="attackDeckNameInput" placeholder="예: 밀스실" style="flex: 2; padding: 10px; border-radius: 5px; border: 1px solid #bdc3c7; outline: none; font-size: 16px; font-weight: bold;">
+                <select id="attackDeckTypeSelect" style="flex: 1; padding: 10px; border-radius: 5px; border: 1px solid #bdc3c7; outline: none; font-size: 14px; font-weight: bold;">
+                    <option value="선택 안함">타입 선택</option><option value="공덱">⚔️ 공덱</option><option value="마덱">🪄 마덱</option><option value="방덱">🛡️ 방덱</option><option value="만능덱">🌀 만능덱</option>
+                </select>
+            </div>
         </div>
         <div class="formation-control">
             <label><strong>진형 선택: </strong></label>
@@ -218,11 +239,19 @@
             </div>
         </div>
 
-        <div id="conceptContainer" class="formation-control" style="margin-top: 15px;">
-            <label><strong>덱 컨셉 설정: </strong></label>
-            <select id="deckConceptSelect" style="padding: 10px; font-weight: bold; color: #c0392b; border: 2px solid #e74c3c; border-radius: 5px; outline: none;">
-                <option value="상관없음">선택 안 함 (상관없음)</option><option value="속공">⚡ 속공 위주</option><option value="속내실">⚖️ 속내실 밸런스</option><option value="내실">🛡️ 내실(버티기) 위주</option>
-            </select>
+        <div id="conceptContainer" class="formation-control" style="margin-top: 15px; display: flex; gap: 10px;">
+            <div style="flex: 1;">
+                <label><strong>덱 타입: </strong></label>
+                <select id="defenseDeckTypeSelect" style="width: 100%; padding: 10px; font-weight: bold; border: 1px solid #bdc3c7; border-radius: 5px; outline: none;">
+                    <option value="선택 안함">타입 선택</option><option value="공덱">⚔️ 공덱</option><option value="마덱">🪄 마덱</option><option value="방덱">🛡️ 방덱</option><option value="만능덱">🌀 만능덱</option>
+                </select>
+            </div>
+            <div style="flex: 1;">
+                <label><strong>세부 컨셉: </strong></label>
+                <select id="deckConceptSelect" style="width: 100%; padding: 10px; font-weight: bold; color: #c0392b; border: 2px solid #e74c3c; border-radius: 5px; outline: none;">
+                    <option value="상관없음">선택 안 함</option><option value="속공">⚡ 속공 위주</option><option value="속내실">⚖️ 속내실 밸런스</option><option value="내실">🛡️ 내실(버티기) 위주</option>
+                </select>
+            </div>
         </div>
 
         <div id="raidDetailRoundToggle" style="display:none; justify-content:center; gap:10px; margin-top:20px; margin-bottom: 10px;">
@@ -359,6 +388,7 @@
                 <div style="display: flex; gap: 10px; margin-top: 5px;">
                     <div style="flex: 1;"><span style="font-size: 11px; color:#555;">➕ 작성 권한</span><select id="permGwDefenseAdd" style="width: 100%; padding: 5px; font-size:12px;"><option value="admin">관리자만</option><option value="master">길드장 이상</option><option value="elite">정예 이상</option><option value="user">모두</option></select></div>
                     <div style="flex: 1;"><span style="font-size: 11px; color:#e74c3c;">🛠️ 타인 글 수정/삭제</span><select id="permGwDefenseManage" style="width: 100%; padding: 5px; font-size:12px;"><option value="admin">관리자만</option><option value="master">길드장 이상</option><option value="elite">정예 이상</option><option value="user">모두</option></select></div>
+                    <div style="flex: 1;"><span style="font-size: 11px; color:#f39c12;">⭐ 추천 덱 설정</span><select id="permGwDefenseRecommend" style="width: 100%; padding: 5px; font-size:12px;"><option value="admin">관리자만</option><option value="master" selected>길드장 이상</option><option value="elite">정예 이상</option><option value="user">모두</option></select></div>
                 </div>
             </div>
 

@@ -17,7 +17,7 @@ const roleWeight = { 'admin': 4, 'master': 3, 'elite': 2, 'user': 1 };
 let permConfig = {
     castleAdd: 'master', castleManage: 'admin',
     gwTargetAdd: 'elite', gwTargetManage: 'master',
-    gwDefenseAdd: 'user', gwDefenseManage: 'elite',
+    gwDefenseAdd: 'user', gwDefenseManage: 'elite', gwDefenseRecommend: 'master',
     gwCounterAdd: 'user', gwCounterManage: 'elite',
     raidAdd: 'elite', raidManage: 'master'
 };
@@ -103,6 +103,8 @@ function resetBuilderState() {
     boardSlots = [null, null, null, null, null]; activeSlotIndex = 0; currentSelectedPet = null; activeSlotType = 'hero'; heroEquipments = {}; skillQueue = []; currentExCount = 1; viewingDeck = null; currentTargetDeckId = null; currentCounterDeckId = null; viewingDeckType = 'defense';
     raidDataBuffer = { 1: { slots: [null,null,null,null,null], pet: null, equips: {}, formation: 'basic', skills: [] }, 2: { slots: [null,null,null,null,null], pet: null, equips: {}, formation: 'basic', skills: [] } }; currentRaidRound = 1;
     document.getElementById('deckConceptSelect').value = '상관없음'; document.getElementById('deckNameInput').value = ''; document.getElementById('deckDescInput').value = ''; document.getElementById('attackDeckNameInput').value = ''; document.getElementById('formationType').value = 'basic'; document.getElementById('deckSpeedOrderInput').value = '';
+    document.getElementById('defenseDeckTypeSelect').value = '선택 안함';
+    document.getElementById('attackDeckTypeSelect').value = '선택 안함';
     const rSpeed1 = document.getElementById('raidSpeed1'); if(rSpeed1) rSpeed1.value = '';
     const rSpeed2 = document.getElementById('raidSpeed2'); if(rSpeed2) rSpeed2.value = '';
 }
@@ -449,12 +451,21 @@ function toggleAccordion(deckId, element) {
 
 function switchMainTab(tabType) {
     currentMainTab = tabType;
-    document.getElementById('tab-attack').classList.remove('active'); document.getElementById('tab-defense').classList.remove('active');
-    const content = document.getElementById('deckListContent'); content.innerHTML = '';
-    const addBtn = document.getElementById('mainAddDeckBtn'); const sortContainer = document.getElementById('attackSortContainer');
+    document.getElementById('tab-attack').classList.remove('active'); 
+    document.getElementById('tab-defense').classList.remove('active');
+    
+    const content = document.getElementById('deckListContent'); 
+    content.innerHTML = '';
+    const addBtn = document.getElementById('mainAddDeckBtn'); 
+    const sortContainer = document.getElementById('attackSortContainer');
+    
+    // 필터 값 가져오기
+    const typeFilter = document.getElementById('gwTypeFilter').value;
+    const sortFilter = document.getElementById('gwSortFilter').value;
 
     if(tabType === 'attack') {
-        document.getElementById('tab-attack').classList.add('active'); sortContainer.style.display = 'flex';
+        document.getElementById('tab-attack').classList.add('active'); 
+        sortContainer.style.display = 'flex';
         document.getElementById('sortWinRateBtn').className = attackSortMode === 'winrate' ? 'sort-btn active' : 'sort-btn';
         document.getElementById('sortLatestBtn').className = attackSortMode === 'latest' ? 'sort-btn active' : 'sort-btn';
         
@@ -462,8 +473,17 @@ function switchMainTab(tabType) {
         addBtn.innerText = '+ 적 방어 덱 등록하기';
         let html = '';
         
-        mockAttackDecks.forEach(deck => {
+        // 💡 타입 필터링 및 리스트 정렬 적용 (적 방어 덱 기준)
+        let filteredTargets = mockAttackDecks.filter(d => typeFilter === 'all' || d.deckType === typeFilter);
+        filteredTargets.sort((a, b) => {
+            if (sortFilter === 'name_asc') return (a.targetName||'').localeCompare(b.targetName||'');
+            if (sortFilter === 'name_desc') return (b.targetName||'').localeCompare(a.targetName||'');
+            return b.id - a.id; // 최신순
+        });
+        
+        filteredTargets.forEach(deck => {
             const targetHtml = (deck.targetHeroes || []).filter(h=>h).map(h => getMiniHeroHTML(h)).join('');
+            const typeBadge = (deck.deckType && deck.deckType !== '선택 안함') ? `<span class="badge-status" style="background:#34495e; color:white; font-size:10px;">${deck.deckType}</span>` : '';
             const canEditTarget = hasPerm('gwTargetManage') || (currentUser && deck.authorId === currentUser.id);
             let targetEditHtml = canEditTarget ? `<div style="text-align: right; margin-bottom: 10px;"><button class="btn-sm" style="background:#f39c12;" onclick="event.stopPropagation(); openDeckBuilder('attack_target_edit', ${deck.id})">수정</button><button class="btn-sm" style="background:#e74c3c;" onclick="event.stopPropagation(); deleteAttackTarget(${deck.id})">삭제</button></div>` : '';
 
@@ -475,7 +495,6 @@ function switchMainTab(tabType) {
             let counterHtml = sortedCounters.map(c => {
                 const canEditCounter = hasPerm('gwCounterManage') || (currentUser && c.authorId === currentUser.id);
                 let counterEditHtml = canEditCounter ? `<button class="btn-sm" style="background:#f39c12;" onclick="event.stopPropagation(); openDeckBuilder('attack_counter_edit', ${deck.id}, ${c.id})">수정</button><button class="btn-sm" style="background:#e74c3c;" onclick="event.stopPropagation(); deleteCounterDeck(${deck.id}, ${c.id})">삭제</button>` : '';
-                
                 const isAdminMaster = currentUser && ['admin', 'master'].includes(currentUser.role);
                 let adminVoteHtml = isAdminMaster ? `<button class="btn-sm" style="background:#8e44ad;" onclick="event.stopPropagation(); openAdminVoteModal(${deck.id}, ${c.id})">⚙️ 승패 임의수정</button>` : '';
                 
@@ -502,19 +521,36 @@ function switchMainTab(tabType) {
             const isOpenClass = openAccordionIds.includes(deck.id) ? 'open' : '';
             html += `<div class="deck-card ${isOpenClass}"><div class="deck-card-header" onclick="toggleAccordion(${deck.id}, this)"><div><span style="font-size:12px; color:#7f8c8d; font-weight:normal;">적 방어 덱</span><br><span style="color:#e74c3c;">${deck.targetName}</span></div><div style="display:flex; align-items:center; gap:10px;"><div class="mini-hero-list">${targetHtml}</div><span>▼</span></div></div><div class="deck-card-body" onclick="event.stopPropagation()">${targetEditHtml}<hr style="border:0; border-top:1px dashed #ddd; margin:15px 0;">${counterHtml}${addCounterBtn}</div></div>`;
         });
-        if(mockAttackDecks.length === 0) html += '<p style="text-align:center; padding: 20px; color: #7f8c8d;">등록된 적 방어 덱이 없습니다.</p>'; content.innerHTML = html;
+        if(filteredTargets.length === 0) html += '<p style="text-align:center; padding: 20px; color: #7f8c8d;">조건에 맞는 적 방어 덱이 없습니다.</p>'; content.innerHTML = html;
     } else {
-        document.getElementById('tab-defense').classList.add('active'); sortContainer.style.display = 'none'; 
+        document.getElementById('tab-defense').classList.add('active'); 
+        sortContainer.style.display = 'none'; 
         
         addBtn.style.display = hasPerm('gwDefenseAdd') ? 'block' : 'none'; 
         addBtn.innerText = '+ 방어 추천 덱 추가하기';
         
-        mockDefenseDecks.forEach(deck => {
-            const heroHtml = (deck.slots || []).filter(h => h).map(h => `<img loading="lazy" src="./images/heroes/${h}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">`).join('');
-            const conceptClass = getConceptClass(deck.concept); const petHtml = deck.pet ? `<img loading="lazy" src="./images/pets/${deck.pet}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">` : '';
-            content.innerHTML += `<div class="defense-deck" onclick="viewDeckDetail('defense', ${deck.id})"><div><div style="font-weight: bold; color: #2980b9; margin-bottom: 5px;">${deck.name || '이름 없는 방어 덱'} <span class="badge-concept ${conceptClass}" style="font-size:10px;">${deck.concept !== '상관없음' ? deck.concept : ''}</span></div><div style="font-size: 13px; color: #555;">💡 ${deck.desc || '설명이 없습니다.'}</div></div><div class="mini-hero-list">${heroHtml} <span style="font-size: 18px; margin: 0 5px;">+</span> ${petHtml}</div></div>`;
+        // 💡 타입 필터링 및 리스트 정렬 적용 (방어 덱 기준)
+        let filteredDefs = mockDefenseDecks.filter(d => typeFilter === 'all' || d.deckType === typeFilter);
+        filteredDefs.sort((a, b) => {
+            // ⭐ 추천 덱 무조건 상단 노출
+            if (a.isRecommended && !b.isRecommended) return -1;
+            if (!a.isRecommended && b.isRecommended) return 1;
+            // 일반 정렬
+            if (sortFilter === 'name_asc') return (a.name||'').localeCompare(b.name||'');
+            if (sortFilter === 'name_desc') return (b.name||'').localeCompare(a.name||'');
+            return b.id - a.id; // 최신순
         });
-        if(mockDefenseDecks.length === 0) content.innerHTML = '<p style="text-align:center; padding: 20px; color: #7f8c8d;">등록된 방어 덱이 없습니다.</p>';
+
+        filteredDefs.forEach(deck => {
+            const heroHtml = (deck.slots || []).filter(h => h).map(h => `<img loading="lazy" src="./images/heroes/${h}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">`).join('');
+            const conceptClass = getConceptClass(deck.concept); 
+            const typeBadge = (deck.deckType && deck.deckType !== '선택 안함') ? `<span class="badge-status" style="background:#34495e; color:white; font-size:10px;">${deck.deckType}</span>` : '';
+            const starIcon = deck.isRecommended ? '<span style="color:#f1c40f; font-size:16px;">⭐</span> ' : '';
+            const petHtml = deck.pet ? `<img loading="lazy" src="./images/pets/${deck.pet}.png" class="mini-hero" onerror="this.src='https://via.placeholder.com/40'">` : '';
+            
+            content.innerHTML += `<div class="defense-deck ${deck.isRecommended ? 'recommended' : ''}" onclick="viewDeckDetail('defense', ${deck.id})"><div><div style="font-weight: bold; color: ${deck.isRecommended ? '#c0392b' : '#2980b9'}; margin-bottom: 5px;">${starIcon}${deck.name || '이름 없는 방어 덱'} <span class="badge-concept ${conceptClass}" style="font-size:10px;">${deck.concept !== '상관없음' ? deck.concept : ''}</span></div><div style="font-size: 13px; color: #555;">💡 ${deck.desc || '설명이 없습니다.'}</div></div><div class="mini-hero-list">${heroHtml} <span style="font-size: 18px; margin: 0 5px;">+</span> ${petHtml}</div></div>`;
+        });
+        if(filteredDefs.length === 0) content.innerHTML = '<p style="text-align:center; padding: 20px; color: #7f8c8d;">조건에 맞는 방어 덱이 없습니다.</p>';
     }
 }
 
@@ -620,8 +656,18 @@ function viewDeckDetail(type, id1, id2) {
     
     let hasPermission = false;
     const isAuthor = currentUser && viewingDeck.authorId === currentUser.id;
+    const recBtn = document.getElementById('recommendDeckBtn');
+    recBtn.style.display = 'none'; // 초기화
     
-    if (viewingDeckType === 'defense') hasPermission = isAuthor || hasPerm('gwDefenseManage');
+    if (viewingDeckType === 'defense') {
+        hasPermission = isAuthor || hasPerm('gwDefenseManage');
+        // 💡 방어덱일 경우 권한이 있다면 추천 덱 설정 버튼 보이기
+        if (hasPerm('gwDefenseRecommend')) {
+            recBtn.style.display = 'inline-block';
+            recBtn.innerText = viewingDeck.isRecommended ? '⭐ 추천 덱 해제' : '⭐ 추천 덱 설정';
+            recBtn.style.backgroundColor = viewingDeck.isRecommended ? '#95a5a6' : '#27ae60';
+        }
+    }
     else if (viewingDeckType === 'raid') hasPermission = isAuthor || hasPerm('raidManage');
     else hasPermission = isAuthor || hasPerm('gwCounterManage');
 
@@ -629,6 +675,20 @@ function viewDeckDetail(type, id1, id2) {
     document.getElementById('editDeckBtn').style.display = hasPermission ? 'inline-block' : 'none';
     
     toggleView('deckDetailView');
+}
+
+function toggleRecommendDeck() {
+    if (!hasPerm('gwDefenseRecommend')) return alert('권한이 없습니다.');
+    if (viewingDeckType !== 'defense' || !viewingDeck) return;
+    
+    viewingDeck.isRecommended = !viewingDeck.isRecommended;
+    
+    // 알림 및 저장
+    logActivity(`⭐ [${viewingDeck.name}] 방어 덱을 추천 덱으로 상태 변경했습니다.`);
+    saveDecksDB();
+    
+    alert(viewingDeck.isRecommended ? '⭐ 길드 추천 덱으로 설정되어 상단에 노출됩니다!' : '일반 덱으로 변경되었습니다.');
+    viewDeckDetail('defense', viewingDeck.id); // 화면 새로고침
 }
 
 function handleDetailBackBtn() { if(viewingDeckType === 'raid') toggleView('raidView'); else toggleView('mainListView'); }
@@ -778,7 +838,7 @@ function openDeckBuilder(mode, targetId = null, counterId = null, dayIdx = null,
             if(saveAtConfigBtn) saveAtConfigBtn.style.display = 'inline-block'; if(builderTitle) builderTitle.innerText = mode === 'attack_target_edit' ? '🛠️ 적 방어 덱 수정' : '🛠️ 적 방어 덱 등록';
             if (mode === 'attack_target_edit') { 
                 const target = mockAttackDecks.find(d => d.id === targetId); 
-                if(target) { document.getElementById('attackDeckNameInput').value = target.targetName || ''; document.getElementById('formationType').value = target.formation || 'basic'; boardSlots = [...(target.targetHeroes || [])]; currentSelectedPet = target.targetPet; }
+                if(target) { document.getElementById('attackDeckNameInput').value = target.targetName || ''; document.getElementById('attackDeckTypeSelect').value = target.deckType || '선택 안함'; document.getElementById('formationType').value = target.formation || 'basic'; boardSlots = [...(target.targetHeroes || [])]; currentSelectedPet = target.targetPet; }
             }
         } else if (mode.startsWith('attack_counter')) {
             if(nTabs) nTabs.style.display = 'flex'; if(builderTitle) builderTitle.innerText = mode === 'attack_counter_edit' ? '🛠️ 카운터 덱 수정' : '🛠️ 카운터 덱 등록';
@@ -800,7 +860,8 @@ function openDeckBuilder(mode, targetId = null, counterId = null, dayIdx = null,
             if (mode === 'defense_edit' && viewingDeck) { 
                 document.getElementById('formationType').value = viewingDeck.formation || 'basic'; boardSlots = [...(viewingDeck.slots || [])]; currentSelectedPet = viewingDeck.pet; 
                 document.getElementById('deckNameInput').value = viewingDeck.name || ''; document.getElementById('deckDescInput').value = viewingDeck.desc || ''; 
-                document.getElementById('deckConceptSelect').value = viewingDeck.concept || '상관없음'; heroEquipments = JSON.parse(JSON.stringify(viewingDeck.equips || {})); 
+                document.getElementById('defenseDeckTypeSelect').value = viewingDeck.deckType || '선택 안함'; // 👈 추가
+                document.getElementById('deckConceptSelect').value = viewingDeck.concept || '상관없음'; heroEquipments = JSON.parse(JSON.stringify(viewingDeck.equips || {}));
                 skillQueue = viewingDeck.skills ? [...viewingDeck.skills] : new Array(3).fill(null); while(skillQueue.length < 3) skillQueue.push(null); 
             } else { skillQueue = new Array(3).fill(null); }
         }
@@ -1093,12 +1154,13 @@ function saveDeck() {
 
     if (builderMode.startsWith('attack_target')) {
         const targetName = document.getElementById('attackDeckNameInput').value.trim();
+        const deckType = document.getElementById('attackDeckTypeSelect').value; // 👈 추가
         if(!targetName) return alert('적 방어 덱 이름을 입력해주세요.'); if(boardSlots.filter(h => h !== null).length === 0) return alert("🚨 최소 1명 이상의 영웅을 배치해주세요.");
         if (builderMode === 'attack_target_edit') { 
-            const target = mockAttackDecks.find(d => d.id === currentTargetDeckId); target.targetName = targetName; target.formation = document.getElementById('formationType').value; target.targetHeroes = [...boardSlots]; target.targetPet = currentSelectedPet; 
+            const target = mockAttackDecks.find(d => d.id === currentTargetDeckId); target.targetName = targetName; target.deckType = deckType; target.formation = document.getElementById('formationType').value; target.targetHeroes = [...boardSlots]; target.targetPet = currentSelectedPet; 
             alert(`✅ '${targetName}' 덱이 성공적으로 수정되었습니다!`); logActivity('🛠️ 길드전 적 방어 덱을 수정했습니다.'); 
         } else { 
-            mockAttackDecks.push({ id: Date.now(), targetName: targetName, formation: document.getElementById('formationType').value, targetHeroes: [...boardSlots], targetPet: currentSelectedPet, counters: [], authorId: currentUser.id, authorNick: currentUser.nickname }); 
+            mockAttackDecks.push({ id: Date.now(), targetName: targetName, deckType: deckType, formation: document.getElementById('formationType').value, targetHeroes: [...boardSlots], targetPet: currentSelectedPet, counters: [], authorId: currentUser.id, authorNick: currentUser.nickname }); 
             alert(`✅ 적 방어 덱 '${targetName}'이(가) 등록되었습니다!`); logActivity('✨ 길드전 새로운 적 방어 덱을 등록했습니다.'); 
         }
         saveDecksDB(); toggleView('mainListView'); return;
@@ -1117,11 +1179,12 @@ function saveDeck() {
     }
 
     const deckConcept = document.getElementById('deckConceptSelect').value;
+    const deckType = document.getElementById('defenseDeckTypeSelect').value;
     if(builderMode === 'defense_edit' && viewingDeck) { 
-        viewingDeck.name = deckName; viewingDeck.desc = deckDesc; viewingDeck.concept = deckConcept; viewingDeck.formation = document.getElementById('formationType').value; viewingDeck.slots = [...boardSlots]; viewingDeck.pet = currentSelectedPet; viewingDeck.equips = JSON.parse(JSON.stringify(heroEquipments)); viewingDeck.skills = [...skillQueue]; 
+        viewingDeck.name = deckName; viewingDeck.desc = deckDesc; viewingDeck.concept = deckConcept; viewingDeck.deckType = deckType; viewingDeck.formation = document.getElementById('formationType').value; viewingDeck.slots = [...boardSlots]; viewingDeck.pet = currentSelectedPet; viewingDeck.equips = JSON.parse(JSON.stringify(heroEquipments)); viewingDeck.skills = [...skillQueue]; 
         alert(`✅ '${deckName}' 덱이 성공적으로 수정되었습니다!`); logActivity('🛠️ 길드전 방어 추천 덱을 수정했습니다.'); 
     } else { 
-        mockDefenseDecks.push({ id: Date.now(), name: deckName, desc: deckDesc, concept: deckConcept, formation: document.getElementById('formationType').value, slots: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname }); 
+        mockDefenseDecks.push({ id: Date.now(), name: deckName, desc: deckDesc, concept: deckConcept, deckType: deckType, isRecommended: false, formation: document.getElementById('formationType').value, slots: [...boardSlots], pet: currentSelectedPet, equips: JSON.parse(JSON.stringify(heroEquipments)), skills: [...skillQueue], authorId: currentUser.id, authorNick: currentUser.nickname }); 
         alert(`✅ '${deckName}' 덱이 성공적으로 추가되었습니다!`); logActivity('✨ 길드전 새로운 방어 추천 덱을 등록했습니다.'); 
     }
     saveDecksDB(); toggleView('mainListView');
@@ -1187,7 +1250,7 @@ function renderPermSelects() {
 function savePermConfig() {
     if (!currentUser || !['admin', 'master'].includes(currentUser.role)) return alert('권한이 없습니다.');
     
-    const keys = ['castleAdd', 'castleManage', 'gwTargetAdd', 'gwTargetManage', 'gwDefenseAdd', 'gwDefenseManage', 'gwCounterAdd', 'gwCounterManage', 'raidAdd', 'raidManage'];
+    const keys = ['castleAdd', 'castleManage', 'gwTargetAdd', 'gwTargetManage', 'gwDefenseAdd', 'gwDefenseManage', 'gwDefenseRecommend', 'gwCounterAdd', 'gwCounterManage', 'raidAdd', 'raidManage']; // 👈 gwDefenseRecommend 추가
     keys.forEach(k => {
         const el = document.getElementById('perm' + k.charAt(0).toUpperCase() + k.slice(1));
         if(el) permConfig[k] = el.value;
