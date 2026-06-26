@@ -954,8 +954,8 @@ function renderAvailableSkills() {
         } 
     }
     
-    const awakeningHeroes = ['델론즈', '실베스타', '스쿨드', '클레미스'];
-    
+    const awakeningHeroes = ['델론즈', '실베스타', '스쿨드', '클레미스', '오르카', '헤브니아', '헬레니아'];
+
     let html = '';
     heroes.forEach(h => {
         html += `<div style="display: flex; flex-direction: column; gap: 8px; justify-content: flex-end;">`;
